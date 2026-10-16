@@ -69,6 +69,25 @@ input[type=range]{width:100%;accent-color:var(--cyan);min-height:32px}
 .hint{margin:0;color:var(--muted);font-size:.88rem;line-height:1.45}
 .msg{margin:0;font-size:.88rem;line-height:1.45;color:#f0c46a}
 .msg:empty{display:none}
+.fs-exit{display:none}
+/* Full screen: only the instrument, as large as the screen allows */
+body.fs{overflow:hidden}
+body.fs header, body.fs .controls, body.fs .bezel-foot{display:none}
+body.fs .bezel{
+  position:fixed;inset:0;z-index:50;border-radius:0;background:#000;box-shadow:none;
+  display:flex;align-items:center;justify-content:center;
+  padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px);
+}
+body.fs .screen{
+  border-radius:0;
+  width:min(100%, calc((100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px)) / 1.06));
+}
+body.fs .fs-exit{
+  display:block;position:fixed;z-index:60;
+  top:calc(env(safe-area-inset-top,0px) + 10px);right:calc(env(safe-area-inset-right,0px) + 10px);
+  min-height:36px;padding:0 12px;font-size:.8rem;
+  background:rgba(20,23,27,.6);border-color:rgba(255,255,255,.25);opacity:.75
+}
 .foot{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
 .placard{
   font-family:var(--cond);font-weight:600;font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;
@@ -88,6 +107,8 @@ input[type=range]{width:100%;accent-color:var(--cyan);min-height:32px}
     </div>
     <div class="bezel-foot"><span class="brand">Pocket PFD</span><span class="knob" aria-hidden="true"></span></div>
   </div>
+
+  <button class="fs-exit" id="fsExit">Exit full screen</button>
 
   <section class="controls" aria-label="Controls">
     <div class="row">
@@ -134,7 +155,7 @@ input[type=range]{width:100%;accent-color:var(--cyan);min-height:32px}
     </div>
 
     <div class="foot">
-      <button id="reset">Reset</button>
+      <div class="row"><button id="fsBtn">Full screen</button><button id="reset">Reset</button></div>
       <span class="placard">Not approved for flight · For fun only</span>
     </div>
   </section>
@@ -715,6 +736,28 @@ input[type=range]{width:100%;accent-color:var(--cyan);min-height:32px}
   };
   $('unitMph').addEventListener('click', () => setUnits('mph'));
   $('unitKt').addEventListener('click', () => setUnits('kt'));
+  // Full screen: iPhone Safari only allows true full screen for video, so the page fills the
+  // window itself; where the browser supports it (iPad, Android, desktop) it also goes native.
+  function enterFs() {
+    document.body.classList.add('fs');
+    const el = document.documentElement;
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (req) { try { const p = req.call(el); if (p && p.catch) p.catch(() => {}); } catch (e) {} }
+    $('fsExit').focus();
+  }
+  function exitFs() {
+    document.body.classList.remove('fs');
+    const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+    if (fsEl) { const ex = document.exitFullscreen || document.webkitExitFullscreen; try { const p = ex.call(document); if (p && p.catch) p.catch(() => {}); } catch (e) {} }
+    $('fsBtn').focus();
+  }
+  ['fullscreenchange', 'webkitfullscreenchange'].forEach(ev => document.addEventListener(ev, () => {
+    if (!(document.fullscreenElement || document.webkitFullscreenElement)) document.body.classList.remove('fs');
+  }));
+  $('fsBtn').addEventListener('click', enterFs);
+  $('fsExit').addEventListener('click', exitFs);
+  window.addEventListener('keydown', e => { if (e.key === 'Escape' && document.body.classList.contains('fs')) exitFs(); });
+
   $('reset').addEventListener('click', () => { if (isDrive()) resetDrive(); else reset(); });
 
   const power = $('power');
