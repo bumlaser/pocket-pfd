@@ -228,9 +228,16 @@ body.fs #fsPage{left:calc(env(safe-area-inset-left,0px) + 8px)}
         <input type="checkbox" role="switch" id="optG">
       </label>
       <label class="opt" for="optLock">
-        <span><b>Target lock</b><small>Uses the camera to spot cats, dogs, cars, planes and more. Hold one in the circle for a lock, then tap the display to fire. Turns on the Camera HUD.</small></span>
+        <span><b>Target lock</b><small>Uses the camera to spot cats, dogs, birds and more. Hold one in the circle for a lock, then tap the display to fire. Turns on the Camera HUD.</small></span>
         <input type="checkbox" role="switch" id="optLock">
       </label>
+      <div class="row" id="lockTargetRow" hidden>
+        <span class="lbl">Targets</span>
+        <div class="seg" role="group" aria-label="What can be locked">
+          <button id="tgtAnimals" aria-pressed="true">Animals</button>
+          <button id="tgtAll" aria-pressed="false">Anything</button>
+        </div>
+      </div>
       <label class="opt" for="optLockSound" id="lockSoundRow" hidden>
         <span><b>Lock sounds</b><small>The seeker growl while tracking and the steady tone on lock.</small></span>
         <input type="checkbox" role="switch" id="optLockSound" checked>
@@ -259,7 +266,7 @@ body.fs #fsPage{left:calc(env(safe-area-inset-left,0px) + 8px)}
   const INIT = { V: 110, alt: 3500, hdg: 230, theta: 2, phi: 0, power: 0.75, selAlt: 3500, selHdg: 230, baro: 29.92 };
   const S = { lat: null, lon: null };
   const IN = { mode: 'drag', cmdTheta: 2, cmdPhi: 0, tiltTheta: 0, tiltPhi: 0, absTheta: 0, absPhi: 0, units: 'mph' };
-  const OPT = { cam: false, voice: false, dto: false, gmeter: false, lock: false, lockSound: true, style: 'g5', wpt: '' };
+  const OPT = { cam: false, voice: false, dto: false, gmeter: false, lock: false, lockSound: true, style: 'g5', targets: 'animals', wpt: '' };
   const GM = { lat: 0, lon: 0, n: 1, peak: 0 };
   let page = 'pfd';
   // Drive-mode sensor state
@@ -645,6 +652,7 @@ body.fs #fsPage{left:calc(env(safe-area-inset-left,0px) + 8px)}
   const TL = { model: null, loading: null, busy: false, lastRun: 0, nid: 0, targets: [], cand: null, lockT: 0, locked: null,
     osc: null, gain: null, lfo: null, lfoGain: null, shot: null };
   const LOCK_TIME = 1.5; // seconds a target must stay in the seeker
+  const ANIMALS = new Set(['bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe']);
   const NAMES = { airplane: 'AIRCRAFT', motorcycle: 'MOTORBIKE', 'sports ball': 'BALL', 'teddy bear': 'TEDDY' };
   function loadScript(src) {
     return new Promise((res, rej) => {
@@ -676,7 +684,7 @@ body.fs #fsPage{left:calc(env(safe-area-inset-left,0px) + 8px)}
   function runDetect(now) {
     if (TL.busy || now - TL.lastRun < 120 || !video.videoWidth) return;
     TL.busy = true; TL.lastRun = now;
-    TL.model.detect(video, 8, 0.45).then(mergeTargets).catch(() => {}).finally(() => { TL.busy = false; });
+    TL.model.detect(video, 10, OPT.targets === 'animals' ? 0.35 : 0.45).then(mergeTargets).catch(() => {}).finally(() => { TL.busy = false; });
   }
   function mergeTargets(preds) {
     const vw = video.videoWidth, vh = video.videoHeight;
@@ -684,6 +692,7 @@ body.fs #fsPage{left:calc(env(safe-area-inset-left,0px) + 8px)}
     const now = performance.now(), used = new Set();
     for (const p of preds) {
       if (p.class === 'person') continue; // no locking on people
+      if (OPT.targets === 'animals' && !ANIMALS.has(p.class)) continue;
       const b = { x: p.bbox[0] * sc + ox, y: p.bbox[1] * sc + oy, w: p.bbox[2] * sc, h: p.bbox[3] * sc };
       let m = null, best = 0.15;
       for (const t of TL.targets) {
@@ -1610,7 +1619,7 @@ body.fs #fsPage{left:calc(env(safe-area-inset-left,0px) + 8px)}
       OPT.cam = ok; e.target.checked = ok;
     } else {
       stopCam(); OPT.cam = false;
-      if (OPT.lock) { OPT.lock = false; $('optLock').checked = false; $('lockSoundRow').hidden = true; stopLock(); }
+      if (OPT.lock) { OPT.lock = false; $('optLock').checked = false; $('lockSoundRow').hidden = true; $('lockTargetRow').hidden = true; stopLock(); }
     }
     saveOpts();
   });
@@ -1632,7 +1641,7 @@ body.fs #fsPage{left:calc(env(safe-area-inset-left,0px) + 8px)}
         OPT.lock = false; e.target.checked = false;
       }
     } else stopLock();
-    $('lockSoundRow').hidden = !OPT.lock;
+    $('lockSoundRow').hidden = !OPT.lock; $('lockTargetRow').hidden = !OPT.lock;
     saveOpts();
   });
   function setStyle(st) {
@@ -1642,6 +1651,15 @@ body.fs #fsPage{left:calc(env(safe-area-inset-left,0px) + 8px)}
     setTone('off'); fighterTone('off');
     saveOpts();
   }
+  function setTargets(v) {
+    OPT.targets = v;
+    $('tgtAnimals').setAttribute('aria-pressed', v === 'animals');
+    $('tgtAll').setAttribute('aria-pressed', v === 'all');
+    TL.targets = []; TL.cand = null; TL.locked = null; TL.lockT = 0;
+    saveOpts();
+  }
+  $('tgtAnimals').addEventListener('click', () => setTargets('animals'));
+  $('tgtAll').addEventListener('click', () => setTargets('all'));
   $('styleG5').addEventListener('click', () => setStyle('g5'));
   $('styleFighter').addEventListener('click', () => setStyle('fighter'));
   $('optLockSound').addEventListener('change', e => {
@@ -1688,12 +1706,15 @@ body.fs #fsPage{left:calc(env(safe-area-inset-left,0px) + 8px)}
     if (!OPT.cam) OPT.lock = false;
     $('optLockSound').checked = OPT.lockSound !== false;
     if (OPT.style !== 'fighter') OPT.style = 'g5';
+    if (OPT.targets !== 'all') OPT.targets = 'animals';
+    $('tgtAnimals').setAttribute('aria-pressed', OPT.targets === 'animals');
+    $('tgtAll').setAttribute('aria-pressed', OPT.targets === 'all');
     $('styleG5').setAttribute('aria-pressed', OPT.style === 'g5');
     $('styleFighter').setAttribute('aria-pressed', OPT.style === 'fighter');
-    $('lockSoundRow').hidden = !OPT.lock;
+    $('lockSoundRow').hidden = !OPT.lock; $('lockTargetRow').hidden = !OPT.lock;
     if (OPT.cam) startCam().then(ok => {
       OPT.cam = ok; $('optCam').checked = ok;
-      if (!ok) { OPT.lock = false; $('optLock').checked = false; $('lockSoundRow').hidden = true; saveOpts(); return; }
+      if (!ok) { OPT.lock = false; $('optLock').checked = false; $('lockSoundRow').hidden = true; $('lockTargetRow').hidden = true; saveOpts(); return; }
       if (OPT.lock) {
         // the growl needs a tap before audio can play
         const unlock = () => { unlockAudio(); window.removeEventListener('pointerdown', unlock); };
