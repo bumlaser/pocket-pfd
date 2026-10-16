@@ -239,7 +239,7 @@ body.fs #fsPage{left:calc(env(safe-area-inset-left,0px) + 8px)}
         </div>
       </div>
       <label class="opt" for="optLockSound" id="lockSoundRow" hidden>
-        <span><b>Lock sounds</b><small>The seeker growl while tracking and the steady tone on lock.</small></span>
+        <span><b>Lock sounds</b><small>Beeps while tracking and a steady tone on lock.</small></span>
         <input type="checkbox" role="switch" id="optLockSound" checked>
       </label>
     </div>
@@ -738,8 +738,7 @@ body.fs #fsPage{left:calc(env(safe-area-inset-left,0px) + 8px)}
     else { TL.cand = best; TL.lockT = 0; }
     TL.locked = best && TL.lockT >= LOCK_TIME ? best : null;
     const mode = TL.shot ? 'off' : TL.locked ? 'lock' : best ? 'track' : 'off';
-    if (OPT.style === 'fighter') { setTone('off'); fighterTone(mode); }
-    else { fighterTone('off'); setTone(mode, TL.lockT / LOCK_TIME); }
+    fighterTone(mode); // same tracking beeps and lock tone in both HUD styles
   }
   function stopLock() {
     TL.targets = []; TL.cand = null; TL.locked = null; TL.lockT = 0; TL.shot = null;
