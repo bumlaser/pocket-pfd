@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="apple-mobile-web-app-capable" content="yes"><style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font-size:14px}</style></head><body><title>Pocket PFD</title>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="apple-mobile-web-app-capable" content="yes"><style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font-size:14px}[hidden]{display:none!important}</style></head><body><title>Pocket PFD</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@500;600;700&display=swap">
@@ -11,6 +11,7 @@
   --ink:#e7eaee;
   --muted:#8b949e;
   --cyan:#41d3e3;
+  --magenta:#e040e0;
   --font:"Barlow", system-ui, -apple-system, sans-serif;
   --cond:"Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
   color-scheme:dark;
@@ -29,14 +30,15 @@ h1{margin:0;font-family:var(--cond);font-weight:700;font-size:1.35rem;letter-spa
 
 .bezel{
   background:linear-gradient(180deg,#24282e,#0d0e11);
-  border-radius:16px;padding:10px 10px 8px;
+  border-radius:16px;padding:10px 10px 6px;
   box-shadow:inset 0 1px 0 rgba(255,255,255,.07), inset 0 -1px 0 rgba(0,0,0,.6), 0 12px 28px rgba(0,0,0,.45);
 }
 .screen{position:relative;width:100%;max-width:100%;aspect-ratio:1/1.06;border-radius:5px;overflow:hidden;background:#000}
-canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
-.bezel-foot{display:flex;justify-content:space-between;align-items:center;padding:8px 4px 0}
+.screen video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+canvas{position:relative;z-index:1;display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+.bezel-foot{display:flex;justify-content:space-between;align-items:center;padding:4px 0 0 4px}
+.bezel-foot .tools{display:flex;gap:2px;align-items:center}
 .brand{font-family:var(--cond);font-weight:600;font-size:.72rem;letter-spacing:.22em;color:#6f7780;text-transform:uppercase}
-.knob{width:30px;height:30px;border-radius:50%;background:radial-gradient(circle at 40% 35%,#4a5059,#16191d 70%);box-shadow:0 2px 4px rgba(0,0,0,.6), inset 0 0 0 2px #0b0c0e}
 
 .controls{display:grid;gap:12px;background:var(--plate);border:1px solid var(--rim);border-radius:12px;padding:12px}
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
@@ -69,7 +71,30 @@ input[type=range]{width:100%;accent-color:var(--cyan);min-height:32px}
 .hint{margin:0;color:var(--muted);font-size:.88rem;line-height:1.45}
 .msg{margin:0;font-size:.88rem;line-height:1.45;color:#f0c46a}
 .msg:empty{display:none}
-.icon-btn.fs-exit{display:none}
+
+/* Options */
+.options{display:grid;gap:8px}
+.opt{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 12px;background:#171a1e;border:1px solid var(--rim);border-radius:10px;cursor:pointer}
+.opt b{display:block;font-family:var(--cond);font-weight:600;letter-spacing:.06em;text-transform:uppercase;font-size:.95rem}
+.opt small{display:block;color:var(--muted);font-size:.82rem;line-height:1.35;margin-top:2px}
+.opt input{appearance:none;-webkit-appearance:none;flex:none;width:46px;height:28px;border-radius:14px;background:#30363d;position:relative;margin:0;cursor:pointer;transition:background .15s}
+.opt input::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#c9cfd6;transition:transform .15s}
+.opt input:checked{background:#0e7480}
+.opt input:checked::after{transform:translateX(18px);background:#fff}
+.dto{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center;margin:0}
+.dto input{min-width:0;width:100%;min-height:40px;padding:0 10px;font:700 1.05rem var(--cond);letter-spacing:.08em;text-transform:uppercase;color:var(--ink);background:#0f1114;border:1px solid #3a4149;border-radius:8px}
+.dto-info{margin:0;color:var(--magenta);font-family:var(--cond);font-weight:600;font-size:.95rem;letter-spacing:.04em}
+.dto-info:empty{display:none}
+@media (prefers-reduced-motion: reduce){ .opt input, .opt input::after{transition:none} }
+
+.icon-btn{
+  display:grid;place-items:center;width:40px;height:40px;min-height:0;padding:0;
+  background:transparent;border:0;border-radius:8px;color:#9aa3ad
+}
+.icon-btn:active{background:rgba(255,255,255,.08);color:var(--ink)}
+.page-btn{width:auto;padding:0 10px;font-size:.8rem;letter-spacing:.14em}
+.fs-only{display:none!important}
+
 /* Full screen: only the instrument, as large as the screen allows */
 body.fs{overflow:hidden}
 body.fs header, body.fs .controls, body.fs .bezel-foot{display:none}
@@ -82,21 +107,21 @@ body.fs .screen{
   border-radius:0;
   width:min(100%, calc((100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px)) / 1.06));
 }
-.icon-btn{
-  display:grid;place-items:center;width:40px;height:40px;min-height:0;padding:0;
-  background:transparent;border:0;border-radius:8px;color:#9aa3ad
-}
-.icon-btn:active{background:rgba(255,255,255,.08);color:var(--ink)}
-body.fs .fs-exit{
-  display:grid;position:fixed;z-index:60;
-  bottom:calc(env(safe-area-inset-bottom,0px) + 8px);right:calc(env(safe-area-inset-right,0px) + 8px);
+body.fs .fs-only{
+  display:grid!important;position:fixed;z-index:60;
+  bottom:calc(env(safe-area-inset-bottom,0px) + 8px);
   background:rgba(12,14,17,.55);color:#e7eaee;opacity:.8
 }
+body.fs .fs-only[hidden]{display:none!important}
+body.fs #fsExit{right:calc(env(safe-area-inset-right,0px) + 8px)}
+body.fs #fsPage{left:calc(env(safe-area-inset-left,0px) + 8px)}
+
 .foot{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
 .placard{
   font-family:var(--cond);font-weight:600;font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;
   color:#d9dde2;background:#0b0c0e;border:1px solid #4a515a;border-radius:3px;padding:5px 8px
 }
+.credit{margin:0;color:#6f7780;font-size:.75rem}
 </style>
 
 <div class="wrap">
@@ -107,17 +132,22 @@ body.fs .fs-exit{
 
   <div class="bezel">
     <div class="screen" id="screen">
+      <video id="cam" playsinline muted autoplay hidden></video>
       <canvas id="pfd" role="img" aria-label="Primary flight display showing attitude, airspeed, altitude, vertical speed and heading"></canvas>
     </div>
     <div class="bezel-foot">
       <span class="brand">Pocket PFD</span>
-      <button class="icon-btn" id="fsBtn" aria-label="Full screen" title="Full screen">
-        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </button>
+      <div class="tools">
+        <button class="icon-btn page-btn" id="pageBtn" hidden>HSI</button>
+        <button class="icon-btn" id="fsBtn" aria-label="Full screen" title="Full screen">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
     </div>
   </div>
 
-  <button class="icon-btn fs-exit" id="fsExit" aria-label="Exit full screen" title="Exit full screen">
+  <button class="icon-btn page-btn fs-only" id="fsPage" hidden>HSI</button>
+  <button class="icon-btn fs-only" id="fsExit" aria-label="Exit full screen" title="Exit full screen">
     <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
   </button>
 
@@ -165,10 +195,37 @@ body.fs .fs-exit{
       </div>
     </div>
 
+    <span class="lbl">Options</span>
+    <div class="options">
+      <label class="opt" for="optCam">
+        <span><b>Camera HUD</b><small>Live camera behind the symbology. In Tilt or Drive, the horizon lines up with the real one.</small></span>
+        <input type="checkbox" role="switch" id="optCam">
+      </label>
+      <label class="opt" for="optVoice">
+        <span><b>Voice callouts</b><small>Bank angle, altitude alerter, stall, and five hundred near your direct-to airport.</small></span>
+        <input type="checkbox" role="switch" id="optVoice">
+      </label>
+      <label class="opt" for="optDto">
+        <span><b>Direct-to</b><small>Adds an HSI page with a course to any US or UK airport. In Drag or Tilt you can fly the sim there.</small></span>
+        <input type="checkbox" role="switch" id="optDto">
+      </label>
+      <form class="dto" id="dtoForm" hidden>
+        <input id="wpt" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Airport, e.g. KFDK" maxlength="7" aria-label="Airport identifier">
+        <button type="submit" id="wptGo">Go</button>
+        <button type="button" id="wptNear">Nearest</button>
+      </form>
+      <p class="dto-info" id="dtoInfo"></p>
+      <label class="opt" for="optG">
+        <span><b>G-meter</b><small>Live and peak g. In Drive it plots sideways and fore-aft g; Reset clears the peak.</small></span>
+        <input type="checkbox" role="switch" id="optG">
+      </label>
+    </div>
+
     <div class="foot">
       <button id="reset">Reset</button>
       <span class="placard">Not approved for flight · For fun only</span>
     </div>
+    <p class="credit">Airport data from OurAirports (public domain).</p>
   </section>
 </div>
 
@@ -180,25 +237,31 @@ body.fs .fs-exit{
   const wrap180 = d => { d = wrap360(d); return d > 180 ? d - 360 : d; };
   const pad3 = n => String(n).padStart(3, '0');
   const F = '"Barlow Semi Condensed", "Arial Narrow", sans-serif';
+  const MAG = '#e040e0', CYAN = '#41d3e3';
 
   // ---------- state ----------
   const INIT = { V: 110, alt: 3500, hdg: 230, theta: 2, phi: 0, power: 0.75, selAlt: 3500, selHdg: 230, baro: 29.92 };
-  const S = {};
-  const IN = { mode: 'drag', cmdTheta: 2, cmdPhi: 0, tiltTheta: 0, tiltPhi: 0, units: 'mph' };
+  const S = { lat: null, lon: null };
+  const IN = { mode: 'drag', cmdTheta: 2, cmdPhi: 0, tiltTheta: 0, tiltPhi: 0, absTheta: 0, absPhi: 0, units: 'mph' };
+  const OPT = { cam: false, voice: false, dto: false, gmeter: false, wpt: '' };
+  const GM = { lat: 0, lon: 0, n: 1, peak: 0 };
+  let page = 'pfd';
   // Drive-mode sensor state
   const DR = {};
   let dcal = null;
   function resetDrive() {
-    Object.assign(DR, { aLat: 0, aLatSlow: 0, pitch: 0, roll: 0, speed: null, track: null, alt: null, altAcc: null,
-      compass: null, prevAlt: null, prevT: 0, vsRaw: 0, hdgSrc: '', haveFix: false, altInit: false, watch: DR.watch ?? null });
+    Object.assign(DR, { aLat: 0, aLatSlow: 0, aLon: 0, pitch: 0, roll: 0, absPitch: 0, absRoll: 0, speed: null, track: null, alt: null, altAcc: null,
+      compass: null, prevAlt: null, prevT: 0, vsRaw: 0, hdgSrc: '', haveFix: false, altInit: false, lat: null, lon: null, watch: DR.watch ?? null });
     dcal = null;
     Object.assign(S, { V: 0, theta: 0, phi: 0, vs: 0, vTrend: 0, slip: 0, rate: 0, stall: false, aoa: 0 });
+    GM.peak = 0;
   }
   const isDrive = () => IN.mode === 'drive';
   function reset() {
     Object.assign(S, INIT, { slip: 0, vTrend: 0, vs: 0, aoa: 2, stall: false, rate: 0 });
     IN.cmdTheta = 2; IN.cmdPhi = 0;
     calib = null;
+    GM.peak = 0;
     syncReadouts();
   }
 
@@ -207,8 +270,9 @@ body.fs .fs-exit{
   const A = 4.24, B = 0.000229, C = 4897, G = 19.06;
   function step(dt) {
     const tilt = IN.mode === 'tilt';
-    const tTheta = clamp(tilt ? IN.tiltTheta : IN.cmdTheta, -30, 30);
-    const tPhi = clamp(tilt ? IN.tiltPhi : IN.cmdPhi, -80, 80);
+    const hud = tilt && OPT.cam;
+    const tTheta = clamp(hud ? IN.absTheta : tilt ? IN.tiltTheta : IN.cmdTheta, -30, 30);
+    const tPhi = clamp(hud ? IN.absPhi : tilt ? IN.tiltPhi : IN.cmdPhi, -80, 80);
     const k = 1 - Math.exp(-dt / (tilt ? 0.06 : 0.35));
     const prevPhi = S.phi;
     S.theta += (tTheta - S.theta) * k;
@@ -234,14 +298,26 @@ body.fs .fs-exit{
 
     S.rate = 1091 * Math.tan(S.phi * D2R) / V; // deg/s
     S.hdg = wrap360(S.hdg + S.rate * dt);
+
+    // move the sim aircraft over the ground once it has a position (Direct-to)
+    if (S.lat != null) {
+      const d = S.V * dt / 3600 / 60; // degrees of arc
+      S.lat += d * Math.cos(S.hdg * D2R);
+      S.lon += d * Math.sin(S.hdg * D2R) / Math.cos(S.lat * D2R);
+    }
+
+    GM.n += (n - GM.n) * (1 - Math.exp(-dt / 0.3));
+    GM.peak = Math.max(GM.peak, GM.n);
   }
 
   // ---------- drive mode: real GPS + motion data ----------
-  // Bank is the bank an aircraft would need for the car's sideways acceleration: atan(a_lat / g).
   function stepDrive(dt) {
     const k = tau => 1 - Math.exp(-dt / tau);
-    S.theta += (clamp(DR.pitch, -30, 30) - S.theta) * k(0.4);
-    const bank = DR.roll + Math.atan2(DR.aLat, 9.81) / D2R;
+    const hud = OPT.cam;
+    S.theta += (clamp(hud ? DR.absPitch : DR.pitch, -30, 30) - S.theta) * k(0.4);
+    // Turn bank: the bank a plane would need for the car's sideways acceleration, atan(a_lat / g).
+    // With the camera on, the horizon shows the real horizon instead.
+    const bank = hud ? DR.absRoll : DR.roll + Math.atan2(DR.aLat, 9.81) / D2R;
     S.phi += (clamp(bank, -60, 60) - S.phi) * k(0.25);
     S.slip += (clamp((DR.aLat - DR.aLatSlow) * 6, -14, 14) - S.slip) * k(0.15);
 
@@ -264,6 +340,12 @@ body.fs .fs-exit{
     } else if (DR.compass != null) {
       S.hdg = wrap360(S.hdg + wrap180(DR.compass - S.hdg) * k(0.5)); DR.hdgSrc = 'MAG';
     } else DR.hdgSrc = '';
+
+    if (DR.lat != null) { S.lat = DR.lat; S.lon = DR.lon; }
+
+    GM.lat += (DR.aLat / 9.81 - GM.lat) * k(0.2);
+    GM.lon += (DR.aLon / 9.81 - GM.lon) * k(0.2);
+    GM.peak = Math.max(GM.peak, Math.hypot(GM.lat, GM.lon));
   }
 
   function onDriveMotion(e) {
@@ -279,25 +361,33 @@ body.fs .fs-exit{
     const s = dcal.s;
     const ux = s * gx / m, uy = s * gy / m, uz = s * gz / m;
     if (!dcal.x) {
-      // Lateral axis: the phone's x axis with the zeroed "up" removed, so a tilted mount still reads true.
+      // Lateral and forward axes with the zeroed "up" removed, so a tilted mount still reads true.
       let lx = 1 - ux * ux, ly = -ux * uy, lz = -ux * uz;
       const lm = Math.hypot(lx, ly, lz) || 1;
       dcal.x = [lx / lm, ly / lm, lz / lm];
+      let fx = uz * ux, fy = uz * uy, fz = -1 + uz * uz;
+      const fm = Math.hypot(fx, fy, fz) || 1;
+      dcal.f = [fx / fm, fy / fm, fz / fm];
       dcal.th0 = Math.asin(clamp(-uz, -1, 1)) / D2R;
       dcal.ph0 = Math.atan2(-ux, uy) / D2R;
       dcal.f0 = s * (ag.x * dcal.x[0] + ag.y * dcal.x[1] + ag.z * dcal.x[2]);
     }
-    const th = Math.asin(clamp(-uz, -1, 1)) / D2R - dcal.th0;
-    DR.pitch += (th - DR.pitch) * 0.05;
+    const thAbs = Math.asin(clamp(-uz, -1, 1)) / D2R;
+    const phAbs = Math.atan2(-ux, uy) / D2R;
+    DR.absPitch += (thAbs - DR.absPitch) * 0.1;
+    DR.absRoll += (phAbs - DR.absRoll) * 0.1;
+    DR.pitch += (thAbs - dcal.th0 - DR.pitch) * 0.05;
     // Real roll (phone or car tilting) comes from gravity; turn bank comes from the car's own
-    // sideways acceleration with gravity removed. Mixing them made a physical tilt read backwards.
-    const ph = hasA ? wrap180(Math.atan2(-ux, uy) / D2R - dcal.ph0) : 0;
+    // sideways acceleration with gravity removed.
+    const ph = hasA ? wrap180(phAbs - dcal.ph0) : 0;
     DR.roll += (ph - DR.roll) * 0.1;
     const lat = hasA
       ? s * (a.x * dcal.x[0] + a.y * dcal.x[1] + a.z * dcal.x[2])
       : s * (ag.x * dcal.x[0] + ag.y * dcal.x[1] + ag.z * dcal.x[2]) - dcal.f0;
     DR.aLat += (lat - DR.aLat) * 0.15;
     DR.aLatSlow += (DR.aLat - DR.aLatSlow) * 0.02;
+    const lon = hasA ? s * (a.x * dcal.f[0] + a.y * dcal.f[1] + a.z * dcal.f[2]) : 0;
+    DR.aLon += (lon - DR.aLon) * 0.15;
   }
   function onOrient(e) {
     if (typeof e.webkitCompassHeading === 'number' && !isNaN(e.webkitCompassHeading)) DR.compass = e.webkitCompassHeading;
@@ -305,6 +395,7 @@ body.fs .fs-exit{
   function onFix(p) {
     const c = p.coords;
     DR.haveFix = true;
+    DR.lat = c.latitude; DR.lon = c.longitude;
     DR.speed = c.speed == null || isNaN(c.speed) || c.speed < 0 ? 0 : c.speed;
     DR.track = c.heading == null || isNaN(c.heading) || c.heading < 0 ? null : c.heading;
     if (c.altitude != null && !isNaN(c.altitude)) {
@@ -351,6 +442,189 @@ body.fs .fs-exit{
     DR.watch = null;
   }
 
+  // ---------- navigation (Direct-to) ----------
+  const RE = 3440.065; // earth radius, NM
+  function gcDist(la1, lo1, la2, lo2) {
+    const p1 = la1 * D2R, p2 = la2 * D2R, dp = p2 - p1, dl = (lo2 - lo1) * D2R;
+    const h = Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
+    return 2 * RE * Math.asin(Math.min(1, Math.sqrt(h)));
+  }
+  function gcBrg(la1, lo1, la2, lo2) {
+    const p1 = la1 * D2R, p2 = la2 * D2R, dl = (lo2 - lo1) * D2R;
+    const y = Math.sin(dl) * Math.cos(p2), x = Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl);
+    return wrap360(Math.atan2(y, x) / D2R);
+  }
+  let AP = null, APidx = null, apLoading = null, DTO = null;
+  function loadAirports() {
+    if (AP) return Promise.resolve(AP);
+    if (!apLoading) {
+      apLoading = fetch('airports.json').then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }).then(list => {
+        AP = list; APidx = new Map();
+        for (const a of list) for (const code of a[0].split(' ')) if (!APidx.has(code)) APidx.set(code, a);
+        return AP;
+      }).catch(err => { apLoading = null; throw err; });
+    }
+    return apLoading;
+  }
+  function nav() {
+    if (!DTO || S.lat == null) return null;
+    if (DTO.olat == null) { DTO.olat = S.lat; DTO.olon = S.lon; DTO.dtk = gcBrg(S.lat, S.lon, DTO.lat, DTO.lon); }
+    const dist = gcDist(S.lat, S.lon, DTO.lat, DTO.lon);
+    const brg = gcBrg(S.lat, S.lon, DTO.lat, DTO.lon);
+    const d13 = gcDist(DTO.olat, DTO.olon, S.lat, S.lon) / RE;
+    const t13 = gcBrg(DTO.olat, DTO.olon, S.lat, S.lon) * D2R;
+    const xtk = Math.asin(Math.sin(d13) * Math.sin(t13 - DTO.dtk * D2R)) * RE; // + = right of course
+    const to = Math.abs(wrap180(brg - DTO.dtk)) < 90;
+    return { dist, brg, xtk, to };
+  }
+  function getLocation() {
+    return new Promise(resolve => {
+      if (!('geolocation' in navigator)) return resolve(null);
+      navigator.geolocation.getCurrentPosition(p => resolve({ lat: p.coords.latitude, lon: p.coords.longitude }),
+        () => resolve(null), { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 });
+    });
+  }
+  async function setTarget(entry, code) {
+    DTO = { code, name: entry[1], lat: entry[2], lon: entry[3], elev: entry[4] || 0, olat: null, olon: null, dtk: 0 };
+    OPT.wpt = code; saveOpts();
+    $('wpt').value = code;
+    if (!isDrive() && S.lat == null) {
+      setMsg('Finding your location to start the sim from…');
+      const here = await getLocation();
+      if (here) { S.lat = here.lat; S.lon = here.lon; setMsg(''); }
+      else {
+        const off = 10 / 60, c45 = Math.cos(45 * D2R);
+        S.lat = DTO.lat - off * c45; S.lon = DTO.lon - off * c45 / Math.cos(DTO.lat * D2R);
+        setMsg(`No location available, so the sim starts 10 NM southwest of ${code}.`);
+      }
+    }
+    const n = nav();
+    if (n && !isDrive()) { S.selHdg = Math.round(DTO.dtk); syncReadouts(); }
+    if (!n) setMsg(isDrive() ? 'Course will set once GPS has a fix.' : '');
+    page = 'hsi'; syncPage();
+    updateDtoInfo();
+  }
+  async function goTo(raw) {
+    const code = raw.trim().toUpperCase();
+    if (!code) return;
+    try { await loadAirports(); } catch (e) { setMsg('Couldn\'t load the airport list. Check your connection and try again.'); return; }
+    const entry = APidx.get(code) || (code.length === 3 ? APidx.get('K' + code) : null);
+    if (!entry) { setMsg(`No airport found for ${code}. Try the four-letter code, like KFDK or EGLL.`); return; }
+    setMsg('');
+    setTarget(entry, entry[0].split(' ').includes(code) ? code : entry[0].split(' ')[0]);
+  }
+  async function goNearest() {
+    try { await loadAirports(); } catch (e) { setMsg('Couldn\'t load the airport list. Check your connection and try again.'); return; }
+    let here = S.lat != null ? { lat: S.lat, lon: S.lon } : null;
+    if (!here) { setMsg('Finding your location…'); here = await getLocation(); }
+    if (!here) { setMsg('Nearest needs a location. Allow location access, or type an airport code.'); return; }
+    let best = null, bd = Infinity;
+    for (const a of AP) {
+      if (!a[5]) continue;
+      const d = gcDist(here.lat, here.lon, a[2], a[3]);
+      if (d < bd) { bd = d; best = a; }
+    }
+    if (!best) return;
+    if (S.lat == null && !isDrive()) { S.lat = here.lat; S.lon = here.lon; }
+    setMsg('');
+    setTarget(best, best[0].split(' ')[0]);
+  }
+  function updateDtoInfo() {
+    $('dtoInfo').textContent = OPT.dto && DTO ? `Direct to ${DTO.code} · ${DTO.name}` : '';
+  }
+
+  // ---------- voice callouts ----------
+  const VO = { ctx: null, last: {}, bank: false, stall: false, captured: false, prevDiff: null, lastSel: null, prevAgl: null };
+  function unlockAudio() {
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!VO.ctx && AC) VO.ctx = new AC();
+      if (VO.ctx && VO.ctx.state === 'suspended') VO.ctx.resume();
+      if ('speechSynthesis' in window) { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); }
+    } catch (e) {}
+  }
+  function say(text, key, gap = 3000) {
+    const now = performance.now();
+    if (VO.last[key] && now - VO.last[key] < gap) return;
+    VO.last[key] = now;
+    try {
+      if (!('speechSynthesis' in window)) return;
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.rate = 1.05; u.pitch = 0.85;
+      speechSynthesis.speak(u);
+    } catch (e) {}
+  }
+  function chime() {
+    const c = VO.ctx; if (!c) return;
+    const t = c.currentTime;
+    [988, 1319].forEach((f, i) => {
+      const o = c.createOscillator(), g = c.createGain(), t0 = t + i * 0.2;
+      o.type = 'sine'; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(0.25, t0 + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.4);
+      o.connect(g); g.connect(c.destination);
+      o.start(t0); o.stop(t0 + 0.45);
+    });
+  }
+  function callouts() {
+    // bank angle
+    if (Math.abs(S.phi) > 35 && !VO.bank) { VO.bank = true; say('Bank angle, bank angle', 'bank', 4000); }
+    else if (Math.abs(S.phi) < 30) VO.bank = false;
+    // stall (sim only), repeated while stalled
+    if (!isDrive() && S.stall) say('Stall, stall', 'stall', 2500);
+    // altitude alerter
+    const altOk = !isDrive() || DR.altInit;
+    if (altOk) {
+      const ia = isDrive() ? S.alt : indAlt();
+      if (VO.lastSel !== S.selAlt) { VO.lastSel = S.selAlt; VO.captured = false; VO.prevDiff = null; }
+      const diff = ia - S.selAlt, ad = Math.abs(diff);
+      if (VO.prevDiff != null && Math.abs(VO.prevDiff) >= 1000 && ad < 1000 && diff * S.vs < 0) { chime(); say('One thousand to go', 'alt1000', 5000); }
+      if (ad < 100) VO.captured = true;
+      else if (VO.captured && ad > 200) { VO.captured = false; chime(); say('Altitude', 'altdev', 5000); }
+      VO.prevDiff = diff;
+      // five hundred above the direct-to airport, when close and descending
+      if (DTO) {
+        const n = nav();
+        const agl = ia - DTO.elev;
+        if (n && n.dist < 5 && VO.prevAgl != null && VO.prevAgl >= 500 && agl < 500 && S.vs < -100) say('Five hundred', '500', 10000);
+        VO.prevAgl = agl;
+      }
+    }
+  }
+
+  // ---------- camera HUD ----------
+  const video = document.getElementById('cam');
+  let camStream = null;
+  async function startCam() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setMsg('The camera isn\'t available in this browser.'); return false;
+    }
+    try {
+      camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+      video.srcObject = camStream; video.hidden = false;
+      try { await video.play(); } catch (e) {}
+      return true;
+    } catch (e) {
+      setMsg('Camera access was declined or isn\'t available, so the HUD is off.');
+      return false;
+    }
+  }
+  function stopCam() {
+    if (camStream) camStream.getTracks().forEach(t => t.stop());
+    camStream = null; video.srcObject = null; video.hidden = true;
+  }
+  // Pixels per degree that match the camera image, so the horizon sits on the real one.
+  // Assumes the iPhone main camera: about 69° across the long side of the frame.
+  function camPpd() {
+    const vw = video.videoWidth, vh = video.videoHeight;
+    if (!camStream || !vw || !vh) return null;
+    const scale = Math.max(W / vw, H / vh);
+    const f = scale * (Math.max(vw, vh) / 2) / Math.tan(34.7 * D2R);
+    return f * D2R;
+  }
+
   // ---------- canvas ----------
   const screen = document.getElementById('screen');
   const cv = document.getElementById('pfd');
@@ -383,29 +657,40 @@ body.fs .fs-exit{
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
     c.clearRect(0, 0, W, H);
     c.lineJoin = 'round';
+    if (page === 'hsi') { drawHsi(c); return; }
 
-    // --- sky / ground ---
+    const hud = OPT.cam && !!camStream;
+    const ppd = (hud && camPpd()) || L.ppd;
+
+    // --- sky / ground (or the camera image) ---
     c.save();
-    c.translate(L.cx, L.cy); c.rotate(-S.phi * D2R); c.translate(0, S.theta * L.ppd);
+    c.translate(L.cx, L.cy); c.rotate(-S.phi * D2R); c.translate(0, S.theta * ppd);
     const big = Math.max(W, H) * 2;
-    let g = c.createLinearGradient(0, -H, 0, 0);
-    g.addColorStop(0, '#1b4ca8'); g.addColorStop(1, '#3a86e6');
-    c.fillStyle = g; c.fillRect(-big, -big, big * 2, big);
-    g = c.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, '#8a5a2e'); g.addColorStop(1, '#55361a');
-    c.fillStyle = g; c.fillRect(-big, 0, big * 2, big);
-    c.fillStyle = '#fff'; c.fillRect(-big, -1, big * 2, 2);
+    if (!hud) {
+      let g = c.createLinearGradient(0, -H, 0, 0);
+      g.addColorStop(0, '#1b4ca8'); g.addColorStop(1, '#3a86e6');
+      c.fillStyle = g; c.fillRect(-big, -big, big * 2, big);
+      g = c.createLinearGradient(0, 0, 0, H);
+      g.addColorStop(0, '#8a5a2e'); g.addColorStop(1, '#55361a');
+      c.fillStyle = g; c.fillRect(-big, 0, big * 2, big);
+      c.fillStyle = '#fff'; c.fillRect(-big, -1, big * 2, 2);
+    } else {
+      c.fillStyle = 'rgba(0,0,0,.7)'; c.fillRect(-big, -2.5, big * 2, 5);
+      c.fillStyle = '#fff'; c.fillRect(-big, -1, big * 2, 2);
+    }
     c.restore();
+
+    if (hud) { c.shadowColor = 'rgba(0,0,0,.85)'; c.shadowBlur = 3; }
 
     // --- pitch ladder ---
     c.save();
     c.beginPath(); c.rect(L.spdW, L.tapeTop, L.freeW, L.hy0 - 30 - L.tapeTop); c.clip();
-    c.translate(L.cx, L.cy); c.rotate(-S.phi * D2R); c.translate(0, S.theta * L.ppd);
+    c.translate(L.cx, L.cy); c.rotate(-S.phi * D2R); c.translate(0, S.theta * ppd);
     c.strokeStyle = '#fff'; c.fillStyle = '#fff'; c.lineWidth = 1.5;
     c.font = `600 ${fs(11)}px ${F}`; c.textBaseline = 'middle';
     for (let p = -90; p <= 90; p += 2.5) {
       if (p === 0 || Math.abs(p - S.theta) > 22) continue;
-      const y = -p * L.ppd;
+      const y = -p * ppd;
       const len = p % 10 === 0 ? L.freeW * 0.42 : p % 5 === 0 ? L.freeW * 0.2 : L.freeW * 0.09;
       c.beginPath(); c.moveTo(-len / 2, y); c.lineTo(len / 2, y); c.stroke();
       if (p % 10 === 0) {
@@ -430,6 +715,7 @@ body.fs .fs-exit{
     }
     c.beginPath(); c.moveTo(0, -L.R); c.lineTo(-7, -L.R - 11); c.lineTo(7, -L.R - 11); c.closePath(); c.stroke();
     c.restore();
+    c.shadowBlur = 0; c.shadowColor = 'transparent';
 
     // fixed roll pointer + slip/skid bar
     const py = L.cy - L.R + 2;
@@ -452,19 +738,61 @@ body.fs .fs-exit{
     c.fillRect(-3, -3, 6, 6); c.strokeRect(-3, -3, 6, 6);
     c.restore();
 
-    if (S.stall) {
+    if (S.stall && !isDrive()) {
       c.font = `700 ${fs(16)}px ${F}`; c.textAlign = 'center'; c.textBaseline = 'middle';
       const sy = L.cy + L.R * 0.62, bw = fs(66), bh = fs(24);
       c.fillStyle = '#d61f1f'; c.fillRect(L.cx - bw / 2, sy - bh / 2, bw, bh);
       c.fillStyle = '#fff'; c.fillText('STALL', L.cx, sy + 1);
     }
 
+    if (OPT.gmeter) drawG(c);
     drawSpeed(c); drawAlt(c); drawVsi(c); drawHeading(c);
+    if (OPT.dto && DTO) drawDtoTag(c);
   }
 
   function tapeBg(c, x, w) {
     c.fillStyle = 'rgba(8,10,14,.55)';
     c.fillRect(x, L.tapeTop, w, L.th);
+  }
+
+  function drawG(c) {
+    const r = fs(24), x = L.spdW + r + fs(8), y = L.hy0 - fs(34) - r - fs(14);
+    c.save();
+    c.font = `600 ${fs(11)}px ${F}`; c.textAlign = 'center'; c.textBaseline = 'middle';
+    if (isDrive()) {
+      c.fillStyle = 'rgba(0,0,0,.55)'; c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill();
+      c.strokeStyle = 'rgba(255,255,255,.75)'; c.lineWidth = 1;
+      c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.stroke();
+      c.beginPath(); c.arc(x, y, r / 2, 0, Math.PI * 2); c.stroke();
+      c.beginPath(); c.moveTo(x - r, y); c.lineTo(x + r, y); c.moveTo(x, y - r); c.lineTo(x, y + r); c.stroke();
+      // peak ring
+      const pr = clamp(GM.peak, 0, 1.2) * r;
+      if (pr > 2) { c.strokeStyle = MAG; c.setLineDash([3, 3]); c.beginPath(); c.arc(x, y, pr, 0, Math.PI * 2); c.stroke(); c.setLineDash([]); }
+      // dot: right turn to the right, accelerating upward (outer ring = 1 g)
+      const dx = clamp(GM.lat, -1.2, 1.2) * r, dy = -clamp(GM.lon, -1.2, 1.2) * r;
+      c.fillStyle = '#ffd21f'; c.strokeStyle = '#000';
+      c.beginPath(); c.arc(x + dx, y + dy, 4, 0, Math.PI * 2); c.fill(); c.stroke();
+      c.fillStyle = '#fff';
+      c.fillText(`${Math.hypot(GM.lat, GM.lon).toFixed(2)}G  MAX ${GM.peak.toFixed(2)}`, x + fs(10), y + r + fs(9));
+    } else {
+      const txt = `G ${GM.n.toFixed(1)}  MAX ${GM.peak.toFixed(1)}`;
+      const tw = c.measureText(txt).width + 12;
+      c.fillStyle = 'rgba(0,0,0,.6)'; c.fillRect(L.spdW + 4, y + r - fs(8), tw, fs(18));
+      c.fillStyle = GM.n > 2 ? '#facc15' : '#fff'; c.textAlign = 'left';
+      c.fillText(txt, L.spdW + 10, y + r + 1);
+    }
+    c.restore();
+  }
+
+  function drawDtoTag(c) {
+    const n = nav();
+    const txt = n ? `${DTO.code} ${n.dist < 100 ? n.dist.toFixed(1) : Math.round(n.dist)}NM` : `${DTO.code} ----`;
+    c.font = `600 ${fs(13)}px ${F}`; c.textAlign = 'center'; c.textBaseline = 'middle';
+    const x0 = L.spdW + fs(26) + 4, x1 = L.altX - 4;
+    const tw = Math.min(c.measureText(txt).width + 12, x1 - x0);
+    const cx = (x0 + x1) / 2;
+    c.fillStyle = '#000'; c.fillRect(cx - tw / 2, 3, tw, L.tapeTop - 6);
+    c.fillStyle = MAG; c.fillText(txt, cx, L.tapeTop / 2);
   }
 
   function drawSpeed(c) {
@@ -494,7 +822,7 @@ body.fs .fs-exit{
     }
     // trend
     const tr = clamp(S.vTrend * uf, -30, 30);
-    if (Math.abs(tr) > 1) { c.fillStyle = '#e040e0'; const y2 = yV(sv + tr); c.fillRect(spdW - 3, Math.min(mid, y2), 3, Math.abs(y2 - mid)); }
+    if (Math.abs(tr) > 1) { c.fillStyle = MAG; const y2 = yV(sv + tr); c.fillRect(spdW - 3, Math.min(mid, y2), 3, Math.abs(y2 - mid)); }
     c.restore();
 
     // readout
@@ -510,11 +838,12 @@ body.fs .fs-exit{
 
     // labels
     c.font = `600 ${fs(12)}px ${F}`; c.textAlign = 'left';
+    c.fillStyle = '#000'; c.fillRect(0, (L.tapeBot + L.hy0) / 2 - fs(9), spdW + fs(12), fs(18));
     c.fillStyle = '#fff';
     if (drive) c.fillText(`GS ${IN.units === 'mph' ? 'MPH' : 'KT'}`, 4, (L.tapeBot + L.hy0) / 2);
     else c.fillText(`TAS ${Math.round(S.V * (1 + S.alt / 1000 * 0.02))}KT`, 4, (L.tapeBot + L.hy0) / 2);
     c.fillStyle = '#000'; c.fillRect(0, 3, spdW + fs(26), L.tapeTop - 6);
-    c.fillStyle = '#41d3e3'; c.fillText(`HDG ${pad3(Math.round(S.selHdg) % 360)}°`, 5, L.tapeTop / 2);
+    c.fillStyle = CYAN; c.fillText(`HDG ${pad3(Math.round(S.selHdg) % 360)}°`, 5, L.tapeTop / 2);
   }
 
   function indAlt() { return S.alt + (S.baro - 29.92) * 1000; }
@@ -537,12 +866,12 @@ body.fs .fs-exit{
     }
     // trend
     const tr = clamp(S.vs * 0.1, -300, 300);
-    if (Math.abs(tr) > 10) { c.fillStyle = '#e040e0'; const y2 = yA(ia + tr); c.fillRect(altX, Math.min(mid, y2), 3, Math.abs(y2 - mid)); }
+    if (Math.abs(tr) > 10) { c.fillStyle = MAG; const y2 = yA(ia + tr); c.fillRect(altX, Math.min(mid, y2), 3, Math.abs(y2 - mid)); }
     c.restore();
 
     // selected altitude bug
     const by = clamp(yA(S.selAlt), tapeTop + 7, tapeBot - 7);
-    c.fillStyle = '#41d3e3';
+    c.fillStyle = CYAN;
     c.beginPath();
     c.moveTo(altX, by - 9); c.lineTo(altX + 7, by - 9); c.lineTo(altX + 7, by + 9); c.lineTo(altX, by + 9);
     c.lineTo(altX, by + 4); c.lineTo(altX + 4, by); c.lineTo(altX, by - 4); c.closePath(); c.fill();
@@ -559,12 +888,14 @@ body.fs .fs-exit{
 
     // selected altitude + baro
     c.fillStyle = '#000'; c.fillRect(altX, 3, W - altX, tapeTop - 6);
-    c.fillStyle = '#41d3e3'; c.font = `600 ${fs(15)}px ${F}`; c.textAlign = 'center';
+    c.fillStyle = CYAN; c.font = `600 ${fs(15)}px ${F}`; c.textAlign = 'center';
     c.fillText(`${S.selAlt}FT`, altX + (W - altX) / 2, tapeTop / 2);
     c.font = `600 ${fs(12)}px ${F}`;
     const foot = !drive ? `${S.baro.toFixed(2)}IN`
       : noAlt ? 'NO GPS'
       : DR.altAcc != null ? `GPS ±${Math.round(DR.altAcc)}` : 'GPS';
+    c.fillStyle = '#000'; c.fillRect(altX, (tapeBot + L.hy0) / 2 - fs(9), W - altX, fs(18));
+    c.fillStyle = CYAN;
     c.fillText(foot, altX + (W - altX) / 2, (tapeBot + L.hy0) / 2);
   }
 
@@ -609,12 +940,22 @@ body.fs .fs-exit{
     c.fillStyle = '#fff';
     for (const s of [-1, 1]) c.fillRect(W / 2 + s * 18 * dpp - 1, hy, 2, 5);
     const tx = W / 2 + clamp(S.rate * 6, -40, 40) * dpp;
-    c.fillStyle = '#e040e0'; c.fillRect(Math.min(W / 2, tx), hy, Math.abs(tx - W / 2), 3);
+    c.fillStyle = MAG; c.fillRect(Math.min(W / 2, tx), hy, Math.abs(tx - W / 2), 3);
 
     // heading bug
     const bx = clamp(W / 2 + wrap180(S.selHdg - S.hdg) * dpp, 7, W - 7);
-    c.fillStyle = '#41d3e3';
+    c.fillStyle = CYAN;
     c.beginPath(); c.moveTo(bx - 7, hy); c.lineTo(bx - 7, hy + 8); c.lineTo(bx, hy + 4); c.lineTo(bx + 7, hy + 8); c.lineTo(bx + 7, hy); c.closePath(); c.fill();
+
+    // bearing to the direct-to airport
+    if (OPT.dto && DTO) {
+      const n = nav();
+      if (n) {
+        const px = clamp(W / 2 + wrap180(n.brg - S.hdg) * dpp, 6, W - 6);
+        c.fillStyle = MAG;
+        c.beginPath(); c.moveTo(px, H - 3); c.lineTo(px - 6, H - 12); c.lineTo(px + 6, H - 12); c.closePath(); c.fill();
+      }
+    }
 
     // heading box
     const bw = fs(56), bh = fs(23), top = hy - bh - 4;
@@ -634,12 +975,131 @@ body.fs .fs-exit{
     }
   }
 
+  // ---------- HSI page ----------
+  function drawHsi(c) {
+    c.fillStyle = '#05070a'; c.fillRect(0, 0, W, H);
+    const cx = W / 2, cy = H * 0.53, r = Math.min(W * 0.4, H * 0.35);
+    const n = OPT.dto && DTO ? nav() : null;
+    const drive = isDrive();
+    const fullScale = n && n.dist < 30 ? 1 : 2; // NM, TERM or ENR
+    const dot = r * 0.2;
+
+    // compass rose (rotates with heading)
+    c.save();
+    c.translate(cx, cy); c.rotate(-S.hdg * D2R);
+    c.fillStyle = 'rgba(255,255,255,.04)'; c.beginPath(); c.arc(0, 0, r, 0, Math.PI * 2); c.fill();
+    c.strokeStyle = '#fff'; c.fillStyle = '#fff'; c.lineWidth = 1.5;
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    for (let d = 0; d < 360; d += 5) {
+      const a = d * D2R, long = d % 10 === 0, r2 = r - (long ? r * 0.09 : r * 0.05);
+      c.beginPath(); c.moveTo(Math.sin(a) * r, -Math.cos(a) * r); c.lineTo(Math.sin(a) * r2, -Math.cos(a) * r2); c.stroke();
+      if (d % 30 === 0) {
+        const card = { 0: 'N', 90: 'E', 180: 'S', 270: 'W' }[d];
+        c.save();
+        c.translate(Math.sin(a) * r * 0.78, -Math.cos(a) * r * 0.78); c.rotate(a);
+        c.font = `${card ? 700 : 600} ${fs(card ? 18 : 14)}px ${F}`;
+        c.fillText(card || String(d / 10), 0, 0);
+        c.restore();
+      }
+    }
+    // heading bug
+    c.save(); c.rotate(S.selHdg * D2R);
+    c.fillStyle = CYAN;
+    c.beginPath(); c.moveTo(-9, -r - 7); c.lineTo(9, -r - 7); c.lineTo(9, -r); c.lineTo(4, -r); c.lineTo(0, -r - 4); c.lineTo(-4, -r); c.lineTo(-9, -r); c.closePath(); c.fill();
+    c.restore();
+
+    if (n) {
+      // bearing pointer to the airport (cyan, thin)
+      c.save(); c.rotate(n.brg * D2R);
+      c.strokeStyle = CYAN; c.fillStyle = CYAN; c.lineWidth = 2;
+      c.beginPath(); c.moveTo(0, -r * 0.97); c.lineTo(0, -r * 0.62); c.moveTo(0, r * 0.62); c.lineTo(0, r * 0.97); c.stroke();
+      c.beginPath(); c.moveTo(0, -r * 0.97); c.lineTo(-6, -r * 0.86); c.lineTo(6, -r * 0.86); c.closePath(); c.fill();
+      c.restore();
+
+      // course pointer + CDI (magenta)
+      c.save(); c.rotate(DTO.dtk * D2R);
+      c.strokeStyle = MAG; c.fillStyle = MAG; c.lineWidth = 4; c.lineCap = 'round';
+      c.beginPath(); c.moveTo(0, -r * 0.84); c.lineTo(0, -r * 0.5); c.moveTo(0, r * 0.5); c.lineTo(0, r * 0.88); c.stroke();
+      c.beginPath(); c.moveTo(0, -r * 0.95); c.lineTo(-9, -r * 0.8); c.lineTo(9, -r * 0.8); c.closePath(); c.fill();
+      // dots
+      c.fillStyle = 'none'; c.strokeStyle = '#fff'; c.lineWidth = 1.5;
+      for (const k of [-2, -1, 1, 2]) { c.beginPath(); c.arc(k * dot, 0, 3.5, 0, Math.PI * 2); c.stroke(); }
+      // deviation bar: if you are right of course, the bar sits left
+      const dev = -clamp(n.xtk / fullScale, -1.2, 1.2) * 2 * dot;
+      c.strokeStyle = MAG; c.lineWidth = 4;
+      c.beginPath(); c.moveTo(dev, -r * 0.45); c.lineTo(dev, r * 0.45); c.stroke();
+      // TO / FROM
+      c.fillStyle = '#fff';
+      c.beginPath();
+      if (n.to) { c.moveTo(dot * 0.9, -r * 0.3); c.lineTo(dot * 0.9 - 7, -r * 0.3 + 10); c.lineTo(dot * 0.9 + 7, -r * 0.3 + 10); }
+      else { c.moveTo(dot * 0.9, r * 0.3); c.lineTo(dot * 0.9 - 7, r * 0.3 - 10); c.lineTo(dot * 0.9 + 7, r * 0.3 - 10); }
+      c.closePath(); c.fill();
+      c.restore();
+    }
+    c.restore();
+
+    // turn rate arc on the rim
+    const tr = clamp(S.rate * 6, -40, 40);
+    if (Math.abs(tr) > 0.5) {
+      c.strokeStyle = MAG; c.lineWidth = 3;
+      c.beginPath(); c.arc(cx, cy, r + 4, -90 * D2R + Math.min(0, tr) * D2R, -90 * D2R + Math.max(0, tr) * D2R); c.stroke();
+    }
+
+    // airplane symbol + lubber
+    c.save(); c.translate(cx, cy);
+    c.strokeStyle = '#fff'; c.lineWidth = 3; c.lineCap = 'round';
+    c.beginPath();
+    c.moveTo(0, -14); c.lineTo(0, 14);
+    c.moveTo(-14, -1); c.lineTo(14, -1);
+    c.moveTo(-6, 12); c.lineTo(6, 12);
+    c.stroke();
+    c.restore();
+    c.fillStyle = '#fff';
+    c.beginPath(); c.moveTo(cx, cy - r + 2); c.lineTo(cx - 7, cy - r - 9); c.lineTo(cx + 7, cy - r - 9); c.closePath(); c.fill();
+
+    // heading box
+    const bw = fs(56), bh = fs(24), top = cy - r - 12 - bh;
+    c.fillStyle = '#000'; c.strokeStyle = '#fff'; c.lineWidth = 1.5;
+    c.fillRect(cx - bw / 2, top, bw, bh); c.strokeRect(cx - bw / 2, top, bw, bh);
+    c.fillStyle = '#fff'; c.font = `700 ${fs(18)}px ${F}`; c.textAlign = 'center'; c.textBaseline = 'middle';
+    let h = Math.round(S.hdg) % 360; if (h === 0) h = 360;
+    c.fillText(pad3(h) + '°', cx, top + bh / 2 + 1);
+
+    // data fields
+    const uf = drive && IN.units === 'mph' ? 1.15078 : 1;
+    const pad = fs(8), yTop = fs(16), yBot = H - fs(14);
+    c.font = `600 ${fs(13)}px ${F}`; c.textBaseline = 'middle';
+    c.textAlign = 'left'; c.fillStyle = '#fff';
+    c.fillText(`GS ${Math.round(S.V * uf)}${drive && IN.units === 'mph' ? 'MPH' : 'KT'}`, pad, yTop);
+    c.fillStyle = CYAN;
+    c.fillText(`HDG ${pad3(Math.round(S.selHdg) % 360)}°`, pad, yTop + fs(18));
+    if (n) {
+      c.textAlign = 'right'; c.fillStyle = MAG; c.font = `700 ${fs(15)}px ${F}`;
+      c.fillText(DTO.code, W - pad, yTop);
+      c.font = `600 ${fs(13)}px ${F}`;
+      c.fillText(`${n.dist < 100 ? n.dist.toFixed(1) : Math.round(n.dist)}NM`, W - pad, yTop + fs(18));
+      c.textAlign = 'left';
+      c.fillText(`DTK ${pad3(Math.round(DTO.dtk) % 360)}°`, pad, yBot);
+      c.fillStyle = '#fff';
+      c.fillText(fullScale === 1 ? 'TERM' : 'ENR', pad, yBot - fs(18));
+      c.textAlign = 'right';
+      const gs = Math.max(S.V, 1), hrs = n.dist / gs;
+      const ete = S.V < 3 ? '--:--' : hrs >= 1 ? `${Math.floor(hrs)}:${String(Math.round(hrs % 1 * 60)).padStart(2, '0')}` : `${Math.floor(hrs * 60)}:${String(Math.round(hrs * 3600 % 60)).padStart(2, '0')}`;
+      c.fillText(`ETE ${ete}`, W - pad, yBot);
+      c.fillText(`BRG ${pad3(Math.round(n.brg) % 360)}°`, W - pad, yBot - fs(18));
+    } else {
+      c.textAlign = 'center'; c.fillStyle = '#9aa3ad'; c.font = `600 ${fs(13)}px ${F}`;
+      c.fillText(OPT.dto ? (DTO ? 'WAITING FOR POSITION' : 'NO WAYPOINT') : 'DIRECT-TO OFF', cx, yBot);
+    }
+  }
+
   // ---------- loop ----------
   let lastT = performance.now();
   function frame(t) {
     const dt = clamp((t - lastT) / 1000, 0.001, 0.05);
     lastT = t;
     if (isDrive()) stepDrive(dt); else step(dt);
+    if (OPT.voice) callouts();
     draw();
     requestAnimationFrame(frame);
   }
@@ -650,7 +1110,7 @@ body.fs .fs-exit{
     cv.setPointerCapture(e.pointerId);
     last = { x: e.clientX, y: e.clientY };
     const now = performance.now();
-    if (now - lastTap < 300) level();
+    if (now - lastTap < 300 && IN.mode === 'drag') level();
     lastTap = now;
   });
   cv.addEventListener('pointermove', e => {
@@ -689,6 +1149,8 @@ body.fs .fs-exit{
     const tTh = th - calib.th0, tPh = wrap180(ph - calib.ph0);
     IN.tiltTheta += (tTh - IN.tiltTheta) * 0.25;
     IN.tiltPhi += (tPh - IN.tiltPhi) * 0.25;
+    IN.absTheta += (th - IN.absTheta) * 0.25;
+    IN.absPhi += (wrap180(ph - IN.absPhi) ) * 0.25;
   }
   async function startTilt() {
     setMsg('Asking for motion access…');
@@ -736,7 +1198,6 @@ body.fs .fs-exit{
       ? 'Mount the phone upright facing you, then tap Zero while stopped or driving straight on level road. Speed, track and altitude come from GPS, and turns show as the bank a plane would need. Passengers only.'
       : 'Drag on the display: sideways to bank, down to pitch up. Double-tap to level the wings. Arrow keys work too.';
     if (m === 'drag') {
-      window.removeEventListener('devicemotion', onMotion);
       IN.cmdTheta = S.theta; IN.cmdPhi = S.phi;
     } else keepAwake();
   }
@@ -745,7 +1206,7 @@ body.fs .fs-exit{
   $('modeDrive').addEventListener('click', () => { if (IN.mode !== 'drive') startDrive(); });
   $('zero').addEventListener('click', () => {
     if (IN.mode === 'tilt') calib = null;
-    else if (IN.mode === 'drive') { dcal = null; DR.pitch = 0; DR.roll = 0; DR.aLat = 0; DR.aLatSlow = 0; }
+    else if (IN.mode === 'drive') { dcal = null; DR.pitch = 0; DR.roll = 0; DR.aLat = 0; DR.aLatSlow = 0; DR.aLon = 0; }
     else level();
   });
   const setUnits = u => {
@@ -755,6 +1216,7 @@ body.fs .fs-exit{
   };
   $('unitMph').addEventListener('click', () => setUnits('mph'));
   $('unitKt').addEventListener('click', () => setUnits('kt'));
+
   // Full screen: iPhone Safari only allows true full screen for video, so the page fills the
   // window itself; where the browser supports it (iPad, Android, desktop) it also goes native.
   function enterFs() {
@@ -776,6 +1238,20 @@ body.fs .fs-exit{
   $('fsBtn').addEventListener('click', enterFs);
   $('fsExit').addEventListener('click', exitFs);
   window.addEventListener('keydown', e => { if (e.key === 'Escape' && document.body.classList.contains('fs')) exitFs(); });
+
+  // PFD / HSI page
+  function syncPage() {
+    if (!OPT.dto) page = 'pfd';
+    const label = page === 'pfd' ? 'HSI' : 'PFD';
+    for (const id of ['pageBtn', 'fsPage']) {
+      const b = $(id);
+      b.hidden = !OPT.dto; b.textContent = label;
+      b.setAttribute('aria-label', `Show ${label} page`);
+    }
+  }
+  const flipPage = () => { page = page === 'pfd' ? 'hsi' : 'pfd'; syncPage(); };
+  $('pageBtn').addEventListener('click', flipPage);
+  $('fsPage').addEventListener('click', flipPage);
 
   $('reset').addEventListener('click', () => { if (isDrive()) resetDrive(); else reset(); });
 
@@ -808,12 +1284,65 @@ body.fs .fs-exit{
     $('baroVal').textContent = S.baro.toFixed(2);
   }
 
+  // ---------- options ----------
+  const KEY = 'pocketpfd.options';
+  function saveOpts() { try { localStorage.setItem(KEY, JSON.stringify(OPT)); } catch (e) {} }
+  function loadOpts() { try { Object.assign(OPT, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {} }
+
+  $('optCam').addEventListener('change', async e => {
+    if (e.target.checked) {
+      const ok = await startCam();
+      OPT.cam = ok; e.target.checked = ok;
+    } else { stopCam(); OPT.cam = false; }
+    saveOpts();
+  });
+  $('optVoice').addEventListener('change', e => {
+    OPT.voice = e.target.checked;
+    if (OPT.voice) { unlockAudio(); say('Callouts on', 'test', 0); }
+    else try { speechSynthesis.cancel(); } catch (err) {}
+    saveOpts();
+  });
+  $('optDto').addEventListener('change', e => {
+    OPT.dto = e.target.checked;
+    $('dtoForm').hidden = !OPT.dto;
+    if (OPT.dto) loadAirports().catch(() => setMsg('Couldn\'t load the airport list. Check your connection and try again.'));
+    else { page = 'pfd'; }
+    syncPage(); updateDtoInfo(); saveOpts();
+  });
+  $('optG').addEventListener('change', e => { OPT.gmeter = e.target.checked; GM.peak = 0; saveOpts(); });
+  $('dtoForm').addEventListener('submit', e => { e.preventDefault(); $('wpt').blur(); goTo($('wpt').value); });
+  $('wptNear').addEventListener('click', goNearest);
+
+  function applyOpts() {
+    $('optVoice').checked = OPT.voice;
+    $('optDto').checked = OPT.dto;
+    $('optG').checked = OPT.gmeter;
+    $('dtoForm').hidden = !OPT.dto;
+    if (OPT.voice) {
+      // audio needs a tap before it can play
+      const unlock = () => { unlockAudio(); window.removeEventListener('pointerdown', unlock); };
+      window.addEventListener('pointerdown', unlock);
+    }
+    if (OPT.dto) {
+      if (OPT.wpt) $('wpt').value = OPT.wpt;
+      loadAirports().then(() => {
+        const entry = OPT.wpt && APidx.get(OPT.wpt);
+        if (entry) DTO = { code: OPT.wpt, name: entry[1], lat: entry[2], lon: entry[3], elev: entry[4] || 0, olat: null, olon: null, dtk: 0 };
+        updateDtoInfo();
+      }).catch(() => {});
+    }
+    if (OPT.cam) startCam().then(ok => { OPT.cam = ok; $('optCam').checked = ok; if (!ok) saveOpts(); });
+    syncPage();
+  }
+
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && IN.mode !== 'drag') keepAwake();
   });
 
+  loadOpts();
   reset();
   setMode('drag');
+  applyOpts();
   requestAnimationFrame(t => { lastT = t; requestAnimationFrame(frame); });
 })();
 </script>
