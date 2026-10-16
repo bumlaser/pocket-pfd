@@ -739,7 +739,7 @@ body.fs #fsPage{left:calc(env(safe-area-inset-left,0px) + 8px)}
   function fire() {
     if (!TL.locked || TL.shot) return;
     const t = TL.locked;
-    TL.shot = { t: 0, id: t.id, label: t.label, x: t.x + t.w / 2, y: t.y + t.h / 2, size: Math.max(t.w, t.h), trail: [], splashed: false };
+    TL.shot = { t: 0, id: t.id };
   }
   function drawTargets(c) {
     const r = seekerR();
@@ -782,39 +782,17 @@ body.fs #fsPage{left:calc(env(safe-area-inset-left,0px) + 8px)}
     c.restore();
   }
 
+  // after a tap-to-fire: just the FOX 2 call-out, then back to tracking
   function drawShot(c) {
     const sh = TL.shot;
     if (!sh) return;
+    if (sh.t > 1.5) { TL.shot = null; TL.lockT = 0; TL.cand = null; return; }
+    const fc = seekC();
     c.save();
+    c.globalAlpha = sh.t > 1.1 ? 1 - (sh.t - 1.1) / 0.4 : 1;
     c.shadowColor = 'rgba(0,0,0,.8)'; c.shadowBlur = 3;
-    if (sh) {
-      const live = TL.targets.find(t => t.id === sh.id);
-      if (live) { sh.x = live.x + live.w / 2; sh.y = live.y + live.h / 2; }
-      const FLY = 1.0;
-      if (sh.t < FLY) {
-        const p = sh.t / FLY, e = p * p;
-        const sx = W / 2, sy = H * 0.9;
-        const x = sx + (sh.x - sx) * e + Math.sin(p * 9) * 6 * (1 - p), y = sy + (sh.y - sy) * e;
-        sh.trail.push({ x, y });
-        c.strokeStyle = 'rgba(230,230,230,.6)'; c.lineWidth = 3; c.lineCap = 'round';
-        c.beginPath(); sh.trail.forEach((q, i) => (i ? c.lineTo(q.x, q.y) : c.moveTo(q.x, q.y))); c.stroke();
-        c.fillStyle = '#fff'; c.beginPath(); c.arc(x, y, 4 * (1 - p * 0.6), 0, Math.PI * 2); c.fill();
-        c.fillStyle = '#ff3b3b'; c.font = `700 ${fs(24)}px ${F}`; c.textAlign = 'center'; c.textBaseline = 'middle';
-        const fc = seekC();
-        c.fillText('FOX 2', fc.x, fc.y + seekerR() * 1.4 + fs(18));
-      } else {
-        const q = clamp((sh.t - FLY) / 0.9, 0, 1), R = sh.size * 0.6 * (0.3 + q);
-        c.shadowBlur = 0;
-        c.globalAlpha = 1 - q;
-        c.fillStyle = '#ffb020'; c.beginPath(); c.arc(sh.x, sh.y, R, 0, Math.PI * 2); c.fill();
-        c.fillStyle = '#fff3c4'; c.beginPath(); c.arc(sh.x, sh.y, R * 0.55, 0, Math.PI * 2); c.fill();
-        c.globalAlpha = 1;
-        c.fillStyle = '#ffd21f'; c.font = `700 ${fs(20)}px ${F}`; c.textAlign = 'center'; c.textBaseline = 'middle';
-        c.shadowBlur = 3;
-        c.fillText('SPLASH', sh.x, sh.y - R - fs(10));
-      }
-      if (sh.t > FLY + 1.4) { TL.shot = null; TL.lockT = 0; TL.cand = null; }
-    }
+    c.fillStyle = '#ff3b3b'; c.font = `700 ${fs(26)}px ${F}`; c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillText('FOX 2', fc.x, fc.y + seekerR() * 1.4 + fs(18));
     c.restore();
   }
 
