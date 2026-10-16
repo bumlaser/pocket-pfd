@@ -69,7 +69,7 @@ input[type=range]{width:100%;accent-color:var(--cyan);min-height:32px}
 .hint{margin:0;color:var(--muted);font-size:.88rem;line-height:1.45}
 .msg{margin:0;font-size:.88rem;line-height:1.45;color:#f0c46a}
 .msg:empty{display:none}
-.fs-exit{display:none}
+.icon-btn.fs-exit{display:none}
 /* Full screen: only the instrument, as large as the screen allows */
 body.fs{overflow:hidden}
 body.fs header, body.fs .controls, body.fs .bezel-foot{display:none}
@@ -82,11 +82,15 @@ body.fs .screen{
   border-radius:0;
   width:min(100%, calc((100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px)) / 1.06));
 }
+.icon-btn{
+  display:grid;place-items:center;width:40px;height:40px;min-height:0;padding:0;
+  background:transparent;border:0;border-radius:8px;color:#9aa3ad
+}
+.icon-btn:active{background:rgba(255,255,255,.08);color:var(--ink)}
 body.fs .fs-exit{
-  display:block;position:fixed;z-index:60;
-  top:calc(env(safe-area-inset-top,0px) + 10px);right:calc(env(safe-area-inset-right,0px) + 10px);
-  min-height:36px;padding:0 12px;font-size:.8rem;
-  background:rgba(20,23,27,.6);border-color:rgba(255,255,255,.25);opacity:.75
+  display:grid;position:fixed;z-index:60;
+  bottom:calc(env(safe-area-inset-bottom,0px) + 8px);right:calc(env(safe-area-inset-right,0px) + 8px);
+  background:rgba(12,14,17,.55);color:#e7eaee;opacity:.8
 }
 .foot{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
 .placard{
@@ -105,10 +109,17 @@ body.fs .fs-exit{
     <div class="screen" id="screen">
       <canvas id="pfd" role="img" aria-label="Primary flight display showing attitude, airspeed, altitude, vertical speed and heading"></canvas>
     </div>
-    <div class="bezel-foot"><span class="brand">Pocket PFD</span><span class="knob" aria-hidden="true"></span></div>
+    <div class="bezel-foot">
+      <span class="brand">Pocket PFD</span>
+      <button class="icon-btn" id="fsBtn" aria-label="Full screen" title="Full screen">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
   </div>
 
-  <button class="fs-exit" id="fsExit">Exit full screen</button>
+  <button class="icon-btn fs-exit" id="fsExit" aria-label="Exit full screen" title="Exit full screen">
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
 
   <section class="controls" aria-label="Controls">
     <div class="row">
@@ -155,7 +166,7 @@ body.fs .fs-exit{
     </div>
 
     <div class="foot">
-      <div class="row"><button id="fsBtn">Full screen</button><button id="reset">Reset</button></div>
+      <button id="reset">Reset</button>
       <span class="placard">Not approved for flight · For fun only</span>
     </div>
   </section>
@@ -178,7 +189,7 @@ body.fs .fs-exit{
   const DR = {};
   let dcal = null;
   function resetDrive() {
-    Object.assign(DR, { aLat: 0, aLatSlow: 0, pitch: 0, speed: null, track: null, alt: null, altAcc: null,
+    Object.assign(DR, { aLat: 0, aLatSlow: 0, pitch: 0, roll: 0, speed: null, track: null, alt: null, altAcc: null,
       compass: null, prevAlt: null, prevT: 0, vsRaw: 0, hdgSrc: '', haveFix: false, altInit: false, watch: DR.watch ?? null });
     dcal = null;
     Object.assign(S, { V: 0, theta: 0, phi: 0, vs: 0, vTrend: 0, slip: 0, rate: 0, stall: false, aoa: 0 });
@@ -230,7 +241,7 @@ body.fs .fs-exit{
   function stepDrive(dt) {
     const k = tau => 1 - Math.exp(-dt / tau);
     S.theta += (clamp(DR.pitch, -30, 30) - S.theta) * k(0.4);
-    const bank = Math.atan2(DR.aLat, 9.81) / D2R;
+    const bank = DR.roll + Math.atan2(DR.aLat, 9.81) / D2R;
     S.phi += (clamp(bank, -60, 60) - S.phi) * k(0.25);
     S.slip += (clamp((DR.aLat - DR.aLatSlow) * 6, -14, 14) - S.slip) * k(0.15);
 
@@ -259,8 +270,9 @@ body.fs .fs-exit{
     const ag = e.accelerationIncludingGravity, a = e.acceleration;
     if (!ag || ag.x == null || ag.y == null || ag.z == null) return;
     // Gravity on its own: the phone's motion processor separates out the car's acceleration for us.
+    const hasA = !!(a && a.x != null && a.y != null && a.z != null);
     let gx = ag.x, gy = ag.y, gz = ag.z;
-    if (a && a.x != null) { gx -= a.x; gy -= a.y; gz -= a.z; }
+    if (hasA) { gx -= a.x; gy -= a.y; gz -= a.z; }
     const m = Math.hypot(gx, gy, gz);
     if (m < 1) return;
     if (!dcal) dcal = { s: gy / m < -0.2 ? -1 : 1 };
@@ -272,11 +284,18 @@ body.fs .fs-exit{
       const lm = Math.hypot(lx, ly, lz) || 1;
       dcal.x = [lx / lm, ly / lm, lz / lm];
       dcal.th0 = Math.asin(clamp(-uz, -1, 1)) / D2R;
+      dcal.ph0 = Math.atan2(-ux, uy) / D2R;
       dcal.f0 = s * (ag.x * dcal.x[0] + ag.y * dcal.x[1] + ag.z * dcal.x[2]);
     }
     const th = Math.asin(clamp(-uz, -1, 1)) / D2R - dcal.th0;
     DR.pitch += (th - DR.pitch) * 0.05;
-    const lat = s * (ag.x * dcal.x[0] + ag.y * dcal.x[1] + ag.z * dcal.x[2]) - dcal.f0;
+    // Real roll (phone or car tilting) comes from gravity; turn bank comes from the car's own
+    // sideways acceleration with gravity removed. Mixing them made a physical tilt read backwards.
+    const ph = hasA ? wrap180(Math.atan2(-ux, uy) / D2R - dcal.ph0) : 0;
+    DR.roll += (ph - DR.roll) * 0.1;
+    const lat = hasA
+      ? s * (a.x * dcal.x[0] + a.y * dcal.x[1] + a.z * dcal.x[2])
+      : s * (ag.x * dcal.x[0] + ag.y * dcal.x[1] + ag.z * dcal.x[2]) - dcal.f0;
     DR.aLat += (lat - DR.aLat) * 0.15;
     DR.aLatSlow += (DR.aLat - DR.aLatSlow) * 0.02;
   }
@@ -726,7 +745,7 @@ body.fs .fs-exit{
   $('modeDrive').addEventListener('click', () => { if (IN.mode !== 'drive') startDrive(); });
   $('zero').addEventListener('click', () => {
     if (IN.mode === 'tilt') calib = null;
-    else if (IN.mode === 'drive') { dcal = null; DR.pitch = 0; DR.aLat = 0; DR.aLatSlow = 0; }
+    else if (IN.mode === 'drive') { dcal = null; DR.pitch = 0; DR.roll = 0; DR.aLat = 0; DR.aLatSlow = 0; }
     else level();
   });
   const setUnits = u => {
