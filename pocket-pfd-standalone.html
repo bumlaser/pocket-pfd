@@ -87,6 +87,12 @@ input[type=range]{width:100%;accent-color:var(--cyan);min-height:32px}
 .dto-info:empty{display:none}
 @media (prefers-reduced-motion: reduce){ .opt input, .opt input::after{transition:none} }
 
+.fox{
+  position:absolute;z-index:2;left:50%;bottom:24%;transform:translateX(-50%);
+  min-height:44px;padding:0 20px;font-size:1.1rem;letter-spacing:.14em;
+  background:#b91c1c;border:1px solid #fca5a5;color:#fff;box-shadow:0 2px 10px rgba(0,0,0,.5)
+}
+.fox:active{background:#991b1b}
 .icon-btn{
   display:grid;place-items:center;width:40px;height:40px;min-height:0;padding:0;
   background:transparent;border:0;border-radius:8px;color:#9aa3ad
@@ -134,6 +140,7 @@ body.fs #fsPage{left:calc(env(safe-area-inset-left,0px) + 8px)}
     <div class="screen" id="screen">
       <video id="cam" playsinline muted autoplay hidden></video>
       <canvas id="pfd" role="img" aria-label="Primary flight display showing attitude, airspeed, altitude, vertical speed and heading"></canvas>
+      <button class="fox" id="fox" hidden>Fox 2</button>
     </div>
     <div class="bezel-foot">
       <span class="brand">Pocket PFD</span>
@@ -219,6 +226,10 @@ body.fs #fsPage{left:calc(env(safe-area-inset-left,0px) + 8px)}
         <span><b>G-meter</b><small>Live and peak g. In Drive it plots sideways and fore-aft g; Reset clears the peak.</small></span>
         <input type="checkbox" role="switch" id="optG">
       </label>
+      <label class="opt" for="optLock">
+        <span><b>Target lock</b><small>Uses the camera to spot cats, dogs, cars, planes and more. Hold one in the circle for a lock, then Fox 2. Turns on the Camera HUD.</small></span>
+        <input type="checkbox" role="switch" id="optLock">
+      </label>
     </div>
 
     <div class="foot">
@@ -243,7 +254,7 @@ body.fs #fsPage{left:calc(env(safe-area-inset-left,0px) + 8px)}
   const INIT = { V: 110, alt: 3500, hdg: 230, theta: 2, phi: 0, power: 0.75, selAlt: 3500, selHdg: 230, baro: 29.92 };
   const S = { lat: null, lon: null };
   const IN = { mode: 'drag', cmdTheta: 2, cmdPhi: 0, tiltTheta: 0, tiltPhi: 0, absTheta: 0, absPhi: 0, units: 'mph' };
-  const OPT = { cam: false, voice: false, dto: false, gmeter: false, wpt: '' };
+  const OPT = { cam: false, voice: false, dto: false, gmeter: false, lock: false, wpt: '' };
   const GM = { lat: 0, lon: 0, n: 1, peak: 0 };
   let page = 'pfd';
   // Drive-mode sensor state
@@ -625,6 +636,174 @@ body.fs #fsPage{left:calc(env(safe-area-inset-left,0px) + 8px)}
     return f * D2R;
   }
 
+  // ---------- target lock (object detection on the camera feed) ----------
+  const TL = { model: null, loading: null, busy: false, lastRun: 0, nid: 0, targets: [], cand: null, lockT: 0, locked: null,
+    osc: null, gain: null, lfo: null, lfoGain: null, shot: null };
+  const LOCK_TIME = 1.5; // seconds a target must stay in the seeker
+  const NAMES = { airplane: 'AIRCRAFT', motorcycle: 'MOTORBIKE', 'sports ball': 'BALL', 'teddy bear': 'TEDDY' };
+  function loadScript(src) {
+    return new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = src; s.onload = res; s.onerror = () => rej(new Error(src));
+      document.head.appendChild(s);
+    });
+  }
+  function loadModel() {
+    if (TL.model) return Promise.resolve(TL.model);
+    if (!TL.loading) {
+      TL.loading = loadScript('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js')
+        .then(() => loadScript('https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js'))
+        .then(() => window.cocoSsd.load({ base: 'lite_mobilenet_v2' }))
+        .then(m => (TL.model = m))
+        .catch(e => { TL.loading = null; throw e; });
+    }
+    return TL.loading;
+  }
+  const seekerR = () => Math.min(W, H) * 0.13;
+  function iou(a, b) {
+    const x1 = Math.max(a.x, b.x), y1 = Math.max(a.y, b.y);
+    const x2 = Math.min(a.x + a.w, b.x + b.w), y2 = Math.min(a.y + a.h, b.y + b.h);
+    const i = Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
+    return i / (a.w * a.h + b.w * b.h - i || 1);
+  }
+  function runDetect(now) {
+    if (TL.busy || now - TL.lastRun < 120 || !video.videoWidth) return;
+    TL.busy = true; TL.lastRun = now;
+    TL.model.detect(video, 8, 0.45).then(mergeTargets).catch(() => {}).finally(() => { TL.busy = false; });
+  }
+  function mergeTargets(preds) {
+    const vw = video.videoWidth, vh = video.videoHeight;
+    const sc = Math.max(W / vw, H / vh), ox = (W - vw * sc) / 2, oy = (H - vh * sc) / 2;
+    const now = performance.now(), used = new Set();
+    for (const p of preds) {
+      if (p.class === 'person') continue; // no locking on people
+      const b = { x: p.bbox[0] * sc + ox, y: p.bbox[1] * sc + oy, w: p.bbox[2] * sc, h: p.bbox[3] * sc };
+      let m = null, best = 0.15;
+      for (const t of TL.targets) {
+        if (t.cls !== p.class || used.has(t.id)) continue;
+        const i = iou(t, b);
+        if (i > best) { best = i; m = t; }
+      }
+      if (m) { for (const k of ['x', 'y', 'w', 'h']) m[k] += (b[k] - m[k]) * 0.6; m.seen = now; used.add(m.id); }
+      else { const t = { id: ++TL.nid, cls: p.class, label: NAMES[p.class] || p.class.toUpperCase(), ...b, seen: now }; TL.targets.push(t); used.add(t.id); }
+    }
+  }
+  function setTone(mode, p) {
+    if (mode === 'off' && !TL.osc) return;
+    const c = VO.ctx; if (!c) return;
+    if (!TL.osc) {
+      // the "growl": a warbling square wave through a low-pass filter
+      TL.osc = c.createOscillator(); TL.osc.type = 'square';
+      TL.lfo = c.createOscillator(); TL.lfo.frequency.value = 16;
+      TL.lfoGain = c.createGain(); TL.lfoGain.gain.value = 60;
+      const filt = c.createBiquadFilter(); filt.type = 'lowpass'; filt.frequency.value = 2400;
+      TL.gain = c.createGain(); TL.gain.gain.value = 0;
+      TL.lfo.connect(TL.lfoGain); TL.lfoGain.connect(TL.osc.frequency);
+      TL.osc.connect(filt); filt.connect(TL.gain); TL.gain.connect(c.destination);
+      TL.osc.start(); TL.lfo.start();
+    }
+    const t = c.currentTime;
+    if (mode === 'off') { TL.gain.gain.setTargetAtTime(0, t, 0.05); return; }
+    const lock = mode === 'lock';
+    TL.osc.frequency.setTargetAtTime(lock ? 1500 : 420 + 380 * clamp(p, 0, 1), t, 0.05);
+    TL.lfoGain.gain.setTargetAtTime(lock ? 0 : 60, t, 0.05);
+    TL.gain.gain.setTargetAtTime(lock ? 0.05 : 0.04, t, 0.05);
+  }
+  function updateLock(dt) {
+    const now = performance.now(), r = seekerR();
+    TL.targets = TL.targets.filter(t => now - t.seen < 700);
+    let best = null, bd = Infinity;
+    for (const t of TL.targets) {
+      const d = Math.hypot(t.x + t.w / 2 - L.cx, t.y + t.h / 2 - L.cy);
+      if (d < r + Math.min(t.w, t.h) / 2 && d < bd) { bd = d; best = t; }
+    }
+    if (best && TL.cand && best.id === TL.cand.id) TL.lockT += dt;
+    else { TL.cand = best; TL.lockT = 0; }
+    TL.locked = best && TL.lockT >= LOCK_TIME ? best : null;
+    if (TL.shot) setTone('off');
+    else setTone(TL.locked ? 'lock' : best ? 'track' : 'off', TL.lockT / LOCK_TIME);
+    $('fox').hidden = !TL.locked || !!TL.shot;
+  }
+  function stopLock() {
+    TL.targets = []; TL.cand = null; TL.locked = null; TL.lockT = 0; TL.shot = null;
+    setTone('off');
+    $('fox').hidden = true;
+  }
+  function fire() {
+    if (!TL.locked || TL.shot) return;
+    const t = TL.locked;
+    TL.shot = { t: 0, id: t.id, label: t.label, x: t.x + t.w / 2, y: t.y + t.h / 2, size: Math.max(t.w, t.h), trail: [], splashed: false };
+    say('Fox two', 'fox', 0);
+    $('fox').hidden = true;
+  }
+  function drawTargets(c) {
+    const r = seekerR();
+    c.save();
+    c.shadowColor = 'rgba(0,0,0,.8)'; c.shadowBlur = 3;
+    c.lineWidth = 2;
+    // seeker circle
+    c.strokeStyle = TL.locked ? '#ff3b3b' : 'rgba(255,255,255,.85)';
+    c.setLineDash(TL.cand && !TL.locked ? [6, 5] : []);
+    c.beginPath(); c.arc(L.cx, L.cy, r, 0, Math.PI * 2); c.stroke();
+    c.setLineDash([]);
+    // target brackets
+    c.font = `600 ${fs(12)}px ${F}`; c.textAlign = 'left'; c.textBaseline = 'bottom';
+    for (const t of TL.targets) {
+      const isC = TL.cand && t.id === TL.cand.id;
+      const col = TL.locked && isC ? '#ff3b3b' : '#4ade80';
+      const k = Math.min(14, t.w / 3, t.h / 3);
+      c.strokeStyle = col; c.fillStyle = col;
+      c.beginPath();
+      c.moveTo(t.x, t.y + k); c.lineTo(t.x, t.y); c.lineTo(t.x + k, t.y);
+      c.moveTo(t.x + t.w - k, t.y); c.lineTo(t.x + t.w, t.y); c.lineTo(t.x + t.w, t.y + k);
+      c.moveTo(t.x + t.w, t.y + t.h - k); c.lineTo(t.x + t.w, t.y + t.h); c.lineTo(t.x + t.w - k, t.y + t.h);
+      c.moveTo(t.x + k, t.y + t.h); c.lineTo(t.x, t.y + t.h); c.lineTo(t.x, t.y + t.h - k);
+      c.stroke();
+      c.fillText(t.label, t.x, t.y - 3);
+    }
+    // seeker diamond walks onto the target as the lock builds
+    if (TL.cand && !TL.shot) {
+      const p = clamp(TL.lockT / LOCK_TIME, 0, 1);
+      const tx = TL.cand.x + TL.cand.w / 2, ty = TL.cand.y + TL.cand.h / 2;
+      const x = L.cx + (tx - L.cx) * p, y = L.cy + (ty - L.cy) * p, s = 11;
+      c.strokeStyle = TL.locked ? '#ff3b3b' : '#ffd21f'; c.lineWidth = 2.5;
+      c.beginPath(); c.moveTo(x, y - s); c.lineTo(x + s, y); c.lineTo(x, y + s); c.lineTo(x - s, y); c.closePath(); c.stroke();
+      if (TL.locked) {
+        c.fillStyle = '#ff3b3b'; c.font = `700 ${fs(22)}px ${F}`; c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.fillText('LOCK', L.cx, L.cy + r + fs(18));
+      }
+    }
+    // missile and splash
+    const sh = TL.shot;
+    if (sh) {
+      const live = TL.targets.find(t => t.id === sh.id);
+      if (live) { sh.x = live.x + live.w / 2; sh.y = live.y + live.h / 2; }
+      const FLY = 1.0;
+      if (sh.t < FLY) {
+        const p = sh.t / FLY, e = p * p;
+        const sx = W / 2, sy = H * 0.9;
+        const x = sx + (sh.x - sx) * e + Math.sin(p * 9) * 6 * (1 - p), y = sy + (sh.y - sy) * e;
+        sh.trail.push({ x, y });
+        c.strokeStyle = 'rgba(230,230,230,.6)'; c.lineWidth = 3; c.lineCap = 'round';
+        c.beginPath(); sh.trail.forEach((q, i) => (i ? c.lineTo(q.x, q.y) : c.moveTo(q.x, q.y))); c.stroke();
+        c.fillStyle = '#fff'; c.beginPath(); c.arc(x, y, 4 * (1 - p * 0.6), 0, Math.PI * 2); c.fill();
+      } else {
+        if (!sh.splashed) { sh.splashed = true; say(`Splash one ${sh.label.toLowerCase()}`, 'splash', 0); }
+        const q = clamp((sh.t - FLY) / 0.9, 0, 1), R = sh.size * 0.6 * (0.3 + q);
+        c.shadowBlur = 0;
+        c.globalAlpha = 1 - q;
+        c.fillStyle = '#ffb020'; c.beginPath(); c.arc(sh.x, sh.y, R, 0, Math.PI * 2); c.fill();
+        c.fillStyle = '#fff3c4'; c.beginPath(); c.arc(sh.x, sh.y, R * 0.55, 0, Math.PI * 2); c.fill();
+        c.globalAlpha = 1;
+        c.fillStyle = '#ffd21f'; c.font = `700 ${fs(20)}px ${F}`; c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.shadowBlur = 3;
+        c.fillText('SPLASH', sh.x, sh.y - R - fs(10));
+      }
+      if (sh.t > FLY + 1.4) { TL.shot = null; TL.lockT = 0; TL.cand = null; }
+    }
+    c.restore();
+  }
+
   // ---------- canvas ----------
   const screen = document.getElementById('screen');
   const cv = document.getElementById('pfd');
@@ -745,6 +924,7 @@ body.fs #fsPage{left:calc(env(safe-area-inset-left,0px) + 8px)}
       c.fillStyle = '#fff'; c.fillText('STALL', L.cx, sy + 1);
     }
 
+    if (hud && OPT.lock && TL.model) drawTargets(c);
     if (OPT.gmeter) drawG(c);
     drawSpeed(c); drawAlt(c); drawVsi(c); drawHeading(c);
     if (OPT.dto && DTO) drawDtoTag(c);
@@ -1100,6 +1280,9 @@ body.fs #fsPage{left:calc(env(safe-area-inset-left,0px) + 8px)}
     lastT = t;
     if (isDrive()) stepDrive(dt); else step(dt);
     if (OPT.voice) callouts();
+    if (OPT.lock && TL.model && camStream && page === 'pfd') { runDetect(t); updateLock(dt); }
+    else if (TL.cand || TL.osc) { TL.cand = null; TL.locked = null; TL.lockT = 0; setTone('off'); $('fox').hidden = true; }
+    if (TL.shot) TL.shot.t += dt;
     draw();
     requestAnimationFrame(frame);
   }
@@ -1293,9 +1476,33 @@ body.fs #fsPage{left:calc(env(safe-area-inset-left,0px) + 8px)}
     if (e.target.checked) {
       const ok = await startCam();
       OPT.cam = ok; e.target.checked = ok;
-    } else { stopCam(); OPT.cam = false; }
+    } else {
+      stopCam(); OPT.cam = false;
+      if (OPT.lock) { OPT.lock = false; $('optLock').checked = false; stopLock(); }
+    }
     saveOpts();
   });
+  $('optLock').addEventListener('change', async e => {
+    OPT.lock = e.target.checked;
+    if (OPT.lock) {
+      unlockAudio();
+      if (!camStream) {
+        const ok = await startCam();
+        OPT.cam = ok; $('optCam').checked = ok;
+        if (!ok) { OPT.lock = false; e.target.checked = false; saveOpts(); return; }
+      }
+      setMsg('Loading target recognition (a few MB, first time only)…');
+      try {
+        await loadModel();
+        setMsg('Target lock ready. Get something in the circle and hold it there.');
+      } catch (err) {
+        setMsg('Couldn\'t load target recognition. Check your connection and try again.');
+        OPT.lock = false; e.target.checked = false;
+      }
+    } else stopLock();
+    saveOpts();
+  });
+  $('fox').addEventListener('click', fire);
   $('optVoice').addEventListener('change', e => {
     OPT.voice = e.target.checked;
     if (OPT.voice) { unlockAudio(); say('Callouts on', 'test', 0); }
@@ -1331,7 +1538,18 @@ body.fs #fsPage{left:calc(env(safe-area-inset-left,0px) + 8px)}
         updateDtoInfo();
       }).catch(() => {});
     }
-    if (OPT.cam) startCam().then(ok => { OPT.cam = ok; $('optCam').checked = ok; if (!ok) saveOpts(); });
+    $('optLock').checked = OPT.lock && OPT.cam;
+    if (!OPT.cam) OPT.lock = false;
+    if (OPT.cam) startCam().then(ok => {
+      OPT.cam = ok; $('optCam').checked = ok;
+      if (!ok) { OPT.lock = false; $('optLock').checked = false; saveOpts(); return; }
+      if (OPT.lock) {
+        // the growl needs a tap before audio can play
+        const unlock = () => { unlockAudio(); window.removeEventListener('pointerdown', unlock); };
+        window.addEventListener('pointerdown', unlock);
+        loadModel().catch(() => { OPT.lock = false; $('optLock').checked = false; });
+      }
+    });
     syncPage();
   }
 
