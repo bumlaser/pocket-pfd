@@ -87,12 +87,6 @@ input[type=range]{width:100%;accent-color:var(--cyan);min-height:32px}
 .dto-info:empty{display:none}
 @media (prefers-reduced-motion: reduce){ .opt input, .opt input::after{transition:none} }
 
-.fox{
-  position:absolute;z-index:2;left:50%;bottom:24%;transform:translateX(-50%);
-  min-height:44px;padding:0 20px;font-size:1.1rem;letter-spacing:.14em;
-  background:#b91c1c;border:1px solid #fca5a5;color:#fff;box-shadow:0 2px 10px rgba(0,0,0,.5)
-}
-.fox:active{background:#991b1b}
 .icon-btn{
   display:grid;place-items:center;width:40px;height:40px;min-height:0;padding:0;
   background:transparent;border:0;border-radius:8px;color:#9aa3ad
@@ -140,7 +134,6 @@ body.fs #fsPage{left:calc(env(safe-area-inset-left,0px) + 8px)}
     <div class="screen" id="screen">
       <video id="cam" playsinline muted autoplay hidden></video>
       <canvas id="pfd" role="img" aria-label="Primary flight display showing attitude, airspeed, altitude, vertical speed and heading"></canvas>
-      <button class="fox" id="fox" hidden>Fox 2</button>
     </div>
     <div class="bezel-foot">
       <span class="brand">Pocket PFD</span>
@@ -227,7 +220,7 @@ body.fs #fsPage{left:calc(env(safe-area-inset-left,0px) + 8px)}
         <input type="checkbox" role="switch" id="optG">
       </label>
       <label class="opt" for="optLock">
-        <span><b>Target lock</b><small>Uses the camera to spot cats, dogs, cars, planes and more. Hold one in the circle for a lock, then Fox 2. Turns on the Camera HUD.</small></span>
+        <span><b>Target lock</b><small>Uses the camera to spot cats, dogs, cars, planes and more. Hold one in the circle for a lock, then tap the display to fire. Turns on the Camera HUD.</small></span>
         <input type="checkbox" role="switch" id="optLock">
       </label>
       <label class="opt" for="optLockSound" id="lockSoundRow" hidden>
@@ -727,18 +720,15 @@ body.fs #fsPage{left:calc(env(safe-area-inset-left,0px) + 8px)}
     TL.locked = best && TL.lockT >= LOCK_TIME ? best : null;
     if (TL.shot) setTone('off');
     else setTone(TL.locked ? 'lock' : best ? 'track' : 'off', TL.lockT / LOCK_TIME);
-    $('fox').hidden = !TL.locked || !!TL.shot;
   }
   function stopLock() {
     TL.targets = []; TL.cand = null; TL.locked = null; TL.lockT = 0; TL.shot = null;
     setTone('off');
-    $('fox').hidden = true;
   }
   function fire() {
     if (!TL.locked || TL.shot) return;
     const t = TL.locked;
     TL.shot = { t: 0, id: t.id, label: t.label, x: t.x + t.w / 2, y: t.y + t.h / 2, size: Math.max(t.w, t.h), trail: [], splashed: false };
-    $('fox').hidden = true;
   }
   function drawTargets(c) {
     const r = seekerR();
@@ -791,6 +781,8 @@ body.fs #fsPage{left:calc(env(safe-area-inset-left,0px) + 8px)}
         c.strokeStyle = 'rgba(230,230,230,.6)'; c.lineWidth = 3; c.lineCap = 'round';
         c.beginPath(); sh.trail.forEach((q, i) => (i ? c.lineTo(q.x, q.y) : c.moveTo(q.x, q.y))); c.stroke();
         c.fillStyle = '#fff'; c.beginPath(); c.arc(x, y, 4 * (1 - p * 0.6), 0, Math.PI * 2); c.fill();
+        c.fillStyle = '#ff3b3b'; c.font = `700 ${fs(24)}px ${F}`; c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.fillText('FOX 2', L.cx, L.cy + seekerR() + fs(18));
       } else {
         const q = clamp((sh.t - FLY) / 0.9, 0, 1), R = sh.size * 0.6 * (0.3 + q);
         c.shadowBlur = 0;
@@ -1284,7 +1276,7 @@ body.fs #fsPage{left:calc(env(safe-area-inset-left,0px) + 8px)}
     if (isDrive()) stepDrive(dt); else step(dt);
     if (OPT.voice) callouts();
     if (OPT.lock && TL.model && camStream && page === 'pfd') { runDetect(t); updateLock(dt); }
-    else if (TL.cand || TL.osc) { TL.cand = null; TL.locked = null; TL.lockT = 0; setTone('off'); $('fox').hidden = true; }
+    else if (TL.cand || TL.osc) { TL.cand = null; TL.locked = null; TL.lockT = 0; setTone('off'); }
     if (TL.shot) TL.shot.t += dt;
     draw();
     requestAnimationFrame(frame);
@@ -1293,6 +1285,7 @@ body.fs #fsPage{left:calc(env(safe-area-inset-left,0px) + 8px)}
   // ---------- drag input ----------
   let last = null, lastTap = 0;
   cv.addEventListener('pointerdown', e => {
+    if (OPT.lock && TL.locked && !TL.shot && page === 'pfd') { fire(); return; }
     cv.setPointerCapture(e.pointerId);
     last = { x: e.clientX, y: e.clientY };
     const now = performance.now();
@@ -1511,7 +1504,6 @@ body.fs #fsPage{left:calc(env(safe-area-inset-left,0px) + 8px)}
     if (OPT.lockSound) unlockAudio(); else { setTone('off'); try { speechSynthesis.cancel(); } catch (err) {} }
     saveOpts();
   });
-  $('fox').addEventListener('click', fire);
   $('optVoice').addEventListener('change', e => {
     OPT.voice = e.target.checked;
     if (OPT.voice) { unlockAudio(); say('Callouts on', 'test', 0); }
