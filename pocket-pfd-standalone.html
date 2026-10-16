@@ -51,7 +51,8 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--cyan);outline-o
 .seg{display:flex;flex:1;min-width:0}
 .seg button{flex:1;border-radius:0}
 .seg button:first-child{border-radius:8px 0 0 8px}
-.seg button:last-child{border-radius:0 8px 8px 0;border-left:0}
+.seg button:last-child{border-radius:0 8px 8px 0}
+.seg button + button{border-left:0}
 .seg button[aria-pressed="true"]{background:#0e3a41;border-color:var(--cyan);color:var(--cyan)}
 #zero{flex:0 0 auto}
 
@@ -78,7 +79,7 @@ input[type=range]{width:100%;accent-color:var(--cyan);min-height:32px}
 <div class="wrap">
   <header>
     <h1>Pocket PFD</h1>
-    <p class="sub">A G5-inspired primary flight display with a simple flight model. Drag to fly, or tilt your phone.</p>
+    <p class="sub">A G5-inspired primary flight display with a simple flight model. Drag to fly, tilt your phone, or take it for a drive.</p>
   </header>
 
   <div class="bezel">
@@ -93,13 +94,22 @@ input[type=range]{width:100%;accent-color:var(--cyan);min-height:32px}
       <div class="seg" role="group" aria-label="Control mode">
         <button id="modeDrag" aria-pressed="true">Drag</button>
         <button id="modeTilt" aria-pressed="false">Tilt</button>
+        <button id="modeDrive" aria-pressed="false">Drive</button>
       </div>
       <button id="zero">Level</button>
     </div>
     <p class="hint" id="hint"></p>
     <p class="msg" id="msg" role="status"></p>
 
-    <div class="power">
+    <div class="row" id="unitsRow" hidden>
+      <span class="lbl">Speed</span>
+      <div class="seg" role="group" aria-label="Speed units">
+        <button id="unitMph" aria-pressed="true">MPH</button>
+        <button id="unitKt" aria-pressed="false">Knots</button>
+      </div>
+    </div>
+
+    <div class="power" id="powerRow">
       <label class="lbl" for="power">Power</label>
       <input type="range" id="power" min="0" max="100" step="1" value="75">
       <span class="val" id="powerVal">75%</span>
@@ -142,7 +152,17 @@ input[type=range]{width:100%;accent-color:var(--cyan);min-height:32px}
   // ---------- state ----------
   const INIT = { V: 110, alt: 3500, hdg: 230, theta: 2, phi: 0, power: 0.75, selAlt: 3500, selHdg: 230, baro: 29.92 };
   const S = {};
-  const IN = { mode: 'drag', cmdTheta: 2, cmdPhi: 0, tiltTheta: 0, tiltPhi: 0 };
+  const IN = { mode: 'drag', cmdTheta: 2, cmdPhi: 0, tiltTheta: 0, tiltPhi: 0, units: 'mph' };
+  // Drive-mode sensor state
+  const DR = {};
+  let dcal = null;
+  function resetDrive() {
+    Object.assign(DR, { aLat: 0, aLatSlow: 0, pitch: 0, speed: null, track: null, alt: null, altAcc: null,
+      compass: null, prevAlt: null, prevT: 0, vsRaw: 0, hdgSrc: '', haveFix: false, altInit: false, watch: DR.watch ?? null });
+    dcal = null;
+    Object.assign(S, { V: 0, theta: 0, phi: 0, vs: 0, vTrend: 0, slip: 0, rate: 0, stall: false, aoa: 0 });
+  }
+  const isDrive = () => IN.mode === 'drive';
   function reset() {
     Object.assign(S, INIT, { slip: 0, vTrend: 0, vs: 0, aoa: 2, stall: false, rate: 0 });
     IN.cmdTheta = 2; IN.cmdPhi = 0;
@@ -182,6 +202,113 @@ input[type=range]{width:100%;accent-color:var(--cyan);min-height:32px}
 
     S.rate = 1091 * Math.tan(S.phi * D2R) / V; // deg/s
     S.hdg = wrap360(S.hdg + S.rate * dt);
+  }
+
+  // ---------- drive mode: real GPS + motion data ----------
+  // Bank is the bank an aircraft would need for the car's sideways acceleration: atan(a_lat / g).
+  function stepDrive(dt) {
+    const k = tau => 1 - Math.exp(-dt / tau);
+    S.theta += (clamp(DR.pitch, -30, 30) - S.theta) * k(0.4);
+    const bank = Math.atan2(DR.aLat, 9.81) / D2R;
+    S.phi += (clamp(bank, -60, 60) - S.phi) * k(0.25);
+    S.slip += (clamp((DR.aLat - DR.aLatSlow) * 6, -14, 14) - S.slip) * k(0.15);
+
+    const prevV = S.V;
+    const target = DR.speed == null ? 0 : DR.speed * 1.94384; // m/s -> kt
+    S.V += (target - S.V) * k(0.6);
+    S.vTrend += ((S.V - prevV) / dt * 6 - S.vTrend) * k(1);
+
+    if (DR.alt != null) {
+      if (!DR.altInit) { S.alt = DR.alt; DR.altInit = true; }
+      S.alt += (DR.alt - S.alt) * k(2);
+    }
+    S.vs += (DR.vsRaw - S.vs) * k(3);
+
+    const mps = S.V / 1.94384;
+    S.rate = mps > 3 ? DR.aLat / mps / D2R : 0;
+    S.hdg = wrap360(S.hdg + S.rate * dt);
+    if (DR.speed != null && DR.speed > 2.5 && DR.track != null) {
+      S.hdg = wrap360(S.hdg + wrap180(DR.track - S.hdg) * k(0.8)); DR.hdgSrc = 'TRK';
+    } else if (DR.compass != null) {
+      S.hdg = wrap360(S.hdg + wrap180(DR.compass - S.hdg) * k(0.5)); DR.hdgSrc = 'MAG';
+    } else DR.hdgSrc = '';
+  }
+
+  function onDriveMotion(e) {
+    const ag = e.accelerationIncludingGravity, a = e.acceleration;
+    if (!ag || ag.x == null || ag.y == null || ag.z == null) return;
+    // Gravity on its own: the phone's motion processor separates out the car's acceleration for us.
+    let gx = ag.x, gy = ag.y, gz = ag.z;
+    if (a && a.x != null) { gx -= a.x; gy -= a.y; gz -= a.z; }
+    const m = Math.hypot(gx, gy, gz);
+    if (m < 1) return;
+    if (!dcal) dcal = { s: gy / m < -0.2 ? -1 : 1 };
+    const s = dcal.s;
+    const ux = s * gx / m, uy = s * gy / m, uz = s * gz / m;
+    if (!dcal.x) {
+      // Lateral axis: the phone's x axis with the zeroed "up" removed, so a tilted mount still reads true.
+      let lx = 1 - ux * ux, ly = -ux * uy, lz = -ux * uz;
+      const lm = Math.hypot(lx, ly, lz) || 1;
+      dcal.x = [lx / lm, ly / lm, lz / lm];
+      dcal.th0 = Math.asin(clamp(-uz, -1, 1)) / D2R;
+      dcal.f0 = s * (ag.x * dcal.x[0] + ag.y * dcal.x[1] + ag.z * dcal.x[2]);
+    }
+    const th = Math.asin(clamp(-uz, -1, 1)) / D2R - dcal.th0;
+    DR.pitch += (th - DR.pitch) * 0.05;
+    const lat = s * (ag.x * dcal.x[0] + ag.y * dcal.x[1] + ag.z * dcal.x[2]) - dcal.f0;
+    DR.aLat += (lat - DR.aLat) * 0.15;
+    DR.aLatSlow += (DR.aLat - DR.aLatSlow) * 0.02;
+  }
+  function onOrient(e) {
+    if (typeof e.webkitCompassHeading === 'number' && !isNaN(e.webkitCompassHeading)) DR.compass = e.webkitCompassHeading;
+  }
+  function onFix(p) {
+    const c = p.coords;
+    DR.haveFix = true;
+    DR.speed = c.speed == null || isNaN(c.speed) || c.speed < 0 ? 0 : c.speed;
+    DR.track = c.heading == null || isNaN(c.heading) || c.heading < 0 ? null : c.heading;
+    if (c.altitude != null && !isNaN(c.altitude)) {
+      const ft = c.altitude * 3.28084, t = p.timestamp / 1000;
+      if (DR.prevAlt == null) { DR.prevAlt = ft; DR.prevT = t; }
+      else if (t - DR.prevT >= 1) {
+        DR.vsRaw = clamp((ft - DR.prevAlt) / (t - DR.prevT) * 60, -3000, 3000);
+        DR.prevAlt = ft; DR.prevT = t;
+      }
+      DR.alt = ft;
+      DR.altAcc = c.altitudeAccuracy != null ? c.altitudeAccuracy * 3.28084 : null;
+    }
+    if (msg.textContent.startsWith('Waiting')) setMsg('');
+  }
+  async function startDrive() {
+    setMsg('Asking for motion and location access…');
+    let motionOk = typeof DeviceMotionEvent !== 'undefined';
+    // Ask for both before any await, so iOS still counts this as the button tap.
+    const reqs = [];
+    try {
+      if (motionOk && typeof DeviceMotionEvent.requestPermission === 'function') reqs.push(DeviceMotionEvent.requestPermission());
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') reqs.push(DeviceOrientationEvent.requestPermission());
+    } catch (e) { motionOk = false; }
+    const res = await Promise.all(reqs.map(p => p.catch(() => 'denied')));
+    if (res.some(r => r !== 'granted')) motionOk = false;
+    if (!('geolocation' in navigator)) { setMsg('Location isn\'t available in this browser, so Drive mode can\'t run.'); return; }
+    setMode('drive');
+    resetDrive();
+    if (motionOk) {
+      window.addEventListener('devicemotion', onDriveMotion);
+      window.addEventListener('deviceorientation', onOrient);
+    }
+    DR.watch = navigator.geolocation.watchPosition(onFix, err => {
+      setMsg(err.code === 1
+        ? 'Location access was declined. Turn on Location Services for Safari websites, then tap Drive again.'
+        : 'No GPS fix yet. It helps to have a clear view of the sky.');
+    }, { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 });
+    setMsg(motionOk ? 'Waiting for GPS…' : 'Motion access is off, so pitch and bank won\'t move. Waiting for GPS…');
+  }
+  function stopDrive() {
+    window.removeEventListener('devicemotion', onDriveMotion);
+    window.removeEventListener('deviceorientation', onOrient);
+    if (DR.watch != null) navigator.geolocation.clearWatch(DR.watch);
+    DR.watch = null;
   }
 
   // ---------- canvas ----------
@@ -302,27 +429,32 @@ input[type=range]{width:100%;accent-color:var(--cyan);min-height:32px}
 
   function drawSpeed(c) {
     const { spdW, tapeTop, th, mid } = L;
-    const kpp = th / 60, yV = v => mid - (v - S.V) * kpp;
+    const drive = isDrive();
+    const uf = drive && IN.units === 'mph' ? 1.15078 : 1;
+    const sv = S.V * uf;
+    const kpp = th / 60, yV = v => mid - (v - sv) * kpp;
     c.save();
     c.beginPath(); c.rect(0, tapeTop, spdW, th); c.clip();
     tapeBg(c, 0, spdW);
     const band = (x, w, a, b, col) => { c.fillStyle = col; const y1 = yV(b), y2 = yV(a); c.fillRect(x, y1, w, y2 - y1); };
     const bx = spdW - 6;
-    band(bx, 6, 48, 129, '#22c55e');
-    band(bx, 6, 129, 163, '#facc15');
-    band(bx, 6, 163, 300, '#e11d1d');
-    band(bx - 4, 3, 33, 85, '#fff');
+    if (!drive) {
+      band(bx, 6, 48, 129, '#22c55e');
+      band(bx, 6, 129, 163, '#facc15');
+      band(bx, 6, 163, 300, '#e11d1d');
+      band(bx - 4, 3, 33, 85, '#fff');
+    }
     c.strokeStyle = '#fff'; c.fillStyle = '#fff'; c.lineWidth = 1.5;
     c.font = `600 ${fs(13)}px ${F}`; c.textAlign = 'right'; c.textBaseline = 'middle';
-    for (let v = Math.floor((S.V - 35) / 5) * 5; v <= S.V + 35; v += 5) {
-      if (v < 20) continue;
+    for (let v = Math.floor((sv - 35) / 5) * 5; v <= sv + 35; v += 5) {
+      if (v < (drive ? 0 : 20)) continue;
       const y = yV(v), len = v % 10 === 0 ? 10 : 6;
       c.beginPath(); c.moveTo(bx - 4 - len, y); c.lineTo(bx - 4, y); c.stroke();
       if (v % 10 === 0) c.fillText(v, bx - 18, y);
     }
     // trend
-    const tr = clamp(S.vTrend, -30, 30);
-    if (Math.abs(tr) > 1) { c.fillStyle = '#e040e0'; const y2 = yV(S.V + tr); c.fillRect(spdW - 3, Math.min(mid, y2), 3, Math.abs(y2 - mid)); }
+    const tr = clamp(S.vTrend * uf, -30, 30);
+    if (Math.abs(tr) > 1) { c.fillStyle = '#e040e0'; const y2 = yV(sv + tr); c.fillRect(spdW - 3, Math.min(mid, y2), 3, Math.abs(y2 - mid)); }
     c.restore();
 
     // readout
@@ -332,14 +464,15 @@ input[type=range]{width:100%;accent-color:var(--cyan);min-height:32px}
     c.moveTo(3, mid - bh / 2); c.lineTo(spdW - 12, mid - bh / 2); c.lineTo(spdW - 12, mid - 6);
     c.lineTo(spdW - 3, mid); c.lineTo(spdW - 12, mid + 6); c.lineTo(spdW - 12, mid + bh / 2); c.lineTo(3, mid + bh / 2);
     c.closePath(); c.fill(); c.stroke();
-    c.fillStyle = S.V < 48 || S.stall ? '#ff4a4a' : '#fff';
+    c.fillStyle = !drive && (S.V < 48 || S.stall) ? '#ff4a4a' : '#fff';
     c.font = `700 ${fs(21)}px ${F}`; c.textAlign = 'right'; c.textBaseline = 'middle';
-    c.fillText(Math.round(S.V), spdW - 15, mid + 1);
+    c.fillText(Math.round(sv), spdW - 15, mid + 1);
 
     // labels
     c.font = `600 ${fs(12)}px ${F}`; c.textAlign = 'left';
-    const tas = Math.round(S.V * (1 + S.alt / 1000 * 0.02));
-    c.fillStyle = '#fff'; c.fillText(`TAS ${tas}KT`, 4, (L.tapeBot + L.hy0) / 2);
+    c.fillStyle = '#fff';
+    if (drive) c.fillText(`GS ${IN.units === 'mph' ? 'MPH' : 'KT'}`, 4, (L.tapeBot + L.hy0) / 2);
+    else c.fillText(`TAS ${Math.round(S.V * (1 + S.alt / 1000 * 0.02))}KT`, 4, (L.tapeBot + L.hy0) / 2);
     c.fillStyle = '#000'; c.fillRect(0, 3, spdW + fs(26), L.tapeTop - 6);
     c.fillStyle = '#41d3e3'; c.fillText(`HDG ${pad3(Math.round(S.selHdg) % 360)}°`, 5, L.tapeTop / 2);
   }
@@ -348,7 +481,9 @@ input[type=range]{width:100%;accent-color:var(--cyan);min-height:32px}
 
   function drawAlt(c) {
     const { altX, altW, tapeTop, tapeBot, th, mid } = L;
-    const ia = indAlt();
+    const drive = isDrive();
+    const noAlt = drive && !DR.altInit;
+    const ia = drive ? S.alt : indAlt();
     const fpp = th / 600, yA = a => mid - (a - ia) * fpp;
     c.save();
     c.beginPath(); c.rect(altX, tapeTop, altW, th); c.clip();
@@ -380,14 +515,17 @@ input[type=range]{width:100%;accent-color:var(--cyan);min-height:32px}
     c.lineTo(altX + altW - 2, mid - bh / 2); c.lineTo(altX + altW - 2, mid + bh / 2);
     c.lineTo(altX + 11, mid + bh / 2); c.lineTo(altX + 11, mid + 6); c.closePath(); c.fill(); c.stroke();
     c.fillStyle = '#fff'; c.font = `700 ${fs(20)}px ${F}`; c.textAlign = 'right'; c.textBaseline = 'middle';
-    c.fillText(Math.round(ia / 10) * 10, altX + altW - 6, mid + 1);
+    c.fillText(noAlt ? '----' : Math.round(ia / 10) * 10, altX + altW - 6, mid + 1);
 
     // selected altitude + baro
     c.fillStyle = '#000'; c.fillRect(altX, 3, W - altX, tapeTop - 6);
     c.fillStyle = '#41d3e3'; c.font = `600 ${fs(15)}px ${F}`; c.textAlign = 'center';
     c.fillText(`${S.selAlt}FT`, altX + (W - altX) / 2, tapeTop / 2);
     c.font = `600 ${fs(12)}px ${F}`;
-    c.fillText(`${S.baro.toFixed(2)}IN`, altX + (W - altX) / 2, (tapeBot + L.hy0) / 2);
+    const foot = !drive ? `${S.baro.toFixed(2)}IN`
+      : noAlt ? 'NO GPS'
+      : DR.altAcc != null ? `GPS ±${Math.round(DR.altAcc)}` : 'GPS';
+    c.fillText(foot, altX + (W - altX) / 2, (tapeBot + L.hy0) / 2);
   }
 
   function drawVsi(c) {
@@ -448,6 +586,12 @@ input[type=range]{width:100%;accent-color:var(--cyan);min-height:32px}
     c.fillStyle = '#fff'; c.font = `700 ${fs(17)}px ${F}`; c.textBaseline = 'middle';
     let h = Math.round(S.hdg) % 360; if (h === 0) h = 360;
     c.fillText(pad3(h) + '°', W / 2, top + bh / 2 + 1);
+    if (isDrive() && DR.hdgSrc) {
+      c.font = `600 ${fs(11)}px ${F}`; c.textAlign = 'right';
+      c.fillStyle = '#000'; const tw = c.measureText(DR.hdgSrc).width + 8;
+      c.fillRect(W / 2 - bw / 2 - 4 - tw, top + 3, tw, bh - 6);
+      c.fillStyle = '#fff'; c.fillText(DR.hdgSrc, W / 2 - bw / 2 - 8, top + bh / 2 + 1);
+    }
   }
 
   // ---------- loop ----------
@@ -455,7 +599,7 @@ input[type=range]{width:100%;accent-color:var(--cyan);min-height:32px}
   function frame(t) {
     const dt = clamp((t - lastT) / 1000, 0.001, 0.05);
     lastT = t;
-    step(dt);
+    if (isDrive()) stepDrive(dt); else step(dt);
     draw();
     requestAnimationFrame(frame);
   }
@@ -535,13 +679,21 @@ input[type=range]{width:100%;accent-color:var(--cyan);min-height:32px}
   const msg = $('msg'), hint = $('hint');
   function setMsg(t) { msg.textContent = t; }
   function setMode(m) {
+    const prev = IN.mode;
     IN.mode = m;
+    if (prev === 'drive' && m !== 'drive') { stopDrive(); reset(); }
+    if (m !== 'tilt') window.removeEventListener('devicemotion', onMotion);
     $('modeDrag').setAttribute('aria-pressed', m === 'drag');
     $('modeTilt').setAttribute('aria-pressed', m === 'tilt');
-    $('zero').textContent = m === 'tilt' ? 'Zero' : 'Level';
+    $('modeDrive').setAttribute('aria-pressed', m === 'drive');
+    $('zero').textContent = m === 'drag' ? 'Level' : 'Zero';
+    $('unitsRow').hidden = m !== 'drive';
+    $('powerRow').hidden = m === 'drive';
     cv.style.cursor = m === 'drag' ? 'grab' : 'default';
     hint.textContent = m === 'tilt'
       ? 'Hold the phone upright like the instrument and tap Zero. Rotate it like a yoke to bank; tilt the top toward you to pitch up. Lock portrait orientation first.'
+      : m === 'drive'
+      ? 'Mount the phone upright facing you, then tap Zero while stopped or driving straight on level road. Speed, track and altitude come from GPS, and turns show as the bank a plane would need. Passengers only.'
       : 'Drag on the display: sideways to bank, down to pitch up. Double-tap to level the wings. Arrow keys work too.';
     if (m === 'drag') {
       window.removeEventListener('devicemotion', onMotion);
@@ -550,8 +702,20 @@ input[type=range]{width:100%;accent-color:var(--cyan);min-height:32px}
   }
   $('modeDrag').addEventListener('click', () => { setMode('drag'); setMsg(''); });
   $('modeTilt').addEventListener('click', () => { if (IN.mode !== 'tilt') startTilt(); });
-  $('zero').addEventListener('click', () => { if (IN.mode === 'tilt') { calib = null; } else level(); });
-  $('reset').addEventListener('click', () => { reset(); });
+  $('modeDrive').addEventListener('click', () => { if (IN.mode !== 'drive') startDrive(); });
+  $('zero').addEventListener('click', () => {
+    if (IN.mode === 'tilt') calib = null;
+    else if (IN.mode === 'drive') { dcal = null; DR.pitch = 0; DR.aLat = 0; DR.aLatSlow = 0; }
+    else level();
+  });
+  const setUnits = u => {
+    IN.units = u;
+    $('unitMph').setAttribute('aria-pressed', u === 'mph');
+    $('unitKt').setAttribute('aria-pressed', u === 'kt');
+  };
+  $('unitMph').addEventListener('click', () => setUnits('mph'));
+  $('unitKt').addEventListener('click', () => setUnits('kt'));
+  $('reset').addEventListener('click', () => { if (isDrive()) resetDrive(); else reset(); });
 
   const power = $('power');
   power.addEventListener('input', () => { S.power = power.value / 100; syncReadouts(); });
@@ -583,7 +747,7 @@ input[type=range]{width:100%;accent-color:var(--cyan);min-height:32px}
   }
 
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && IN.mode === 'tilt') keepAwake();
+    if (document.visibilityState === 'visible' && IN.mode !== 'drag') keepAwake();
   });
 
   reset();
