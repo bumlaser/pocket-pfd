@@ -230,6 +230,10 @@ body.fs #fsPage{left:calc(env(safe-area-inset-left,0px) + 8px)}
         <span><b>Target lock</b><small>Uses the camera to spot cats, dogs, cars, planes and more. Hold one in the circle for a lock, then Fox 2. Turns on the Camera HUD.</small></span>
         <input type="checkbox" role="switch" id="optLock">
       </label>
+      <label class="opt" for="optLockSound" id="lockSoundRow" hidden>
+        <span><b>Lock sounds</b><small>Seeker growl, lock tone, launch, explosion and the Fox 2 and Splash calls.</small></span>
+        <input type="checkbox" role="switch" id="optLockSound" checked>
+      </label>
     </div>
 
     <div class="foot">
@@ -254,7 +258,7 @@ body.fs #fsPage{left:calc(env(safe-area-inset-left,0px) + 8px)}
   const INIT = { V: 110, alt: 3500, hdg: 230, theta: 2, phi: 0, power: 0.75, selAlt: 3500, selHdg: 230, baro: 29.92 };
   const S = { lat: null, lon: null };
   const IN = { mode: 'drag', cmdTheta: 2, cmdPhi: 0, tiltTheta: 0, tiltPhi: 0, absTheta: 0, absPhi: 0, units: 'mph' };
-  const OPT = { cam: false, voice: false, dto: false, gmeter: false, lock: false, wpt: '' };
+  const OPT = { cam: false, voice: false, dto: false, gmeter: false, lock: false, lockSound: true, wpt: '' };
   const GM = { lat: 0, lon: 0, n: 1, peak: 0 };
   let page = 'pfd';
   // Drive-mode sensor state
@@ -688,7 +692,34 @@ body.fs #fsPage{left:calc(env(safe-area-inset-left,0px) + 8px)}
       else { const t = { id: ++TL.nid, cls: p.class, label: NAMES[p.class] || p.class.toUpperCase(), ...b, seen: now }; TL.targets.push(t); used.add(t.id); }
     }
   }
+  function noise(c, dur) {
+    const b = c.createBuffer(1, Math.floor(c.sampleRate * dur), c.sampleRate), d = b.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    const s = c.createBufferSource(); s.buffer = b; return s;
+  }
+  function whoosh() {
+    const c = VO.ctx; if (!c || !OPT.lockSound) return;
+    const t = c.currentTime, s = noise(c, 1.1);
+    const f = c.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 1.2;
+    f.frequency.setValueAtTime(600, t); f.frequency.exponentialRampToValueAtTime(3500, t + 1);
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.35, t + 0.08); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.05);
+    s.connect(f); f.connect(g); g.connect(c.destination); s.start(t); s.stop(t + 1.1);
+  }
+  function boom() {
+    const c = VO.ctx; if (!c || !OPT.lockSound) return;
+    const t = c.currentTime, s = noise(c, 1.6);
+    const f = c.createBiquadFilter(); f.type = 'lowpass';
+    f.frequency.setValueAtTime(1200, t); f.frequency.exponentialRampToValueAtTime(90, t + 1.4);
+    const g = c.createGain(); g.gain.setValueAtTime(0.9, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.5);
+    s.connect(f); f.connect(g); g.connect(c.destination); s.start(t); s.stop(t + 1.6);
+    const o = c.createOscillator(), og = c.createGain();
+    o.frequency.setValueAtTime(90, t); o.frequency.exponentialRampToValueAtTime(35, t + 0.8);
+    og.gain.setValueAtTime(0.6, t); og.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
+    o.connect(og); og.connect(c.destination); o.start(t); o.stop(t + 0.95);
+  }
   function setTone(mode, p) {
+    if (!OPT.lockSound) mode = 'off';
     if (mode === 'off' && !TL.osc) return;
     const c = VO.ctx; if (!c) return;
     if (!TL.osc) {
@@ -733,7 +764,7 @@ body.fs #fsPage{left:calc(env(safe-area-inset-left,0px) + 8px)}
     if (!TL.locked || TL.shot) return;
     const t = TL.locked;
     TL.shot = { t: 0, id: t.id, label: t.label, x: t.x + t.w / 2, y: t.y + t.h / 2, size: Math.max(t.w, t.h), trail: [], splashed: false };
-    say('Fox two', 'fox', 0);
+    if (OPT.lockSound) { say('Fox two', 'fox', 0); whoosh(); }
     $('fox').hidden = true;
   }
   function drawTargets(c) {
@@ -788,7 +819,10 @@ body.fs #fsPage{left:calc(env(safe-area-inset-left,0px) + 8px)}
         c.beginPath(); sh.trail.forEach((q, i) => (i ? c.lineTo(q.x, q.y) : c.moveTo(q.x, q.y))); c.stroke();
         c.fillStyle = '#fff'; c.beginPath(); c.arc(x, y, 4 * (1 - p * 0.6), 0, Math.PI * 2); c.fill();
       } else {
-        if (!sh.splashed) { sh.splashed = true; say(`Splash one ${sh.label.toLowerCase()}`, 'splash', 0); }
+        if (!sh.splashed) {
+          sh.splashed = true;
+          if (OPT.lockSound) { boom(); const lbl = sh.label.toLowerCase(); setTimeout(() => say(`Splash one ${lbl}`, 'splash', 0), 700); }
+        }
         const q = clamp((sh.t - FLY) / 0.9, 0, 1), R = sh.size * 0.6 * (0.3 + q);
         c.shadowBlur = 0;
         c.globalAlpha = 1 - q;
@@ -1478,7 +1512,7 @@ body.fs #fsPage{left:calc(env(safe-area-inset-left,0px) + 8px)}
       OPT.cam = ok; e.target.checked = ok;
     } else {
       stopCam(); OPT.cam = false;
-      if (OPT.lock) { OPT.lock = false; $('optLock').checked = false; stopLock(); }
+      if (OPT.lock) { OPT.lock = false; $('optLock').checked = false; $('lockSoundRow').hidden = true; stopLock(); }
     }
     saveOpts();
   });
@@ -1500,6 +1534,12 @@ body.fs #fsPage{left:calc(env(safe-area-inset-left,0px) + 8px)}
         OPT.lock = false; e.target.checked = false;
       }
     } else stopLock();
+    $('lockSoundRow').hidden = !OPT.lock;
+    saveOpts();
+  });
+  $('optLockSound').addEventListener('change', e => {
+    OPT.lockSound = e.target.checked;
+    if (OPT.lockSound) unlockAudio(); else { setTone('off'); try { speechSynthesis.cancel(); } catch (err) {} }
     saveOpts();
   });
   $('fox').addEventListener('click', fire);
@@ -1540,9 +1580,11 @@ body.fs #fsPage{left:calc(env(safe-area-inset-left,0px) + 8px)}
     }
     $('optLock').checked = OPT.lock && OPT.cam;
     if (!OPT.cam) OPT.lock = false;
+    $('optLockSound').checked = OPT.lockSound !== false;
+    $('lockSoundRow').hidden = !OPT.lock;
     if (OPT.cam) startCam().then(ok => {
       OPT.cam = ok; $('optCam').checked = ok;
-      if (!ok) { OPT.lock = false; $('optLock').checked = false; saveOpts(); return; }
+      if (!ok) { OPT.lock = false; $('optLock').checked = false; $('lockSoundRow').hidden = true; saveOpts(); return; }
       if (OPT.lock) {
         // the growl needs a tap before audio can play
         const unlock = () => { unlockAudio(); window.removeEventListener('pointerdown', unlock); };
