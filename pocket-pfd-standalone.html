@@ -1,0 +1,594 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="apple-mobile-web-app-capable" content="yes"><style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font-size:14px}</style></head><body><title>Pocket PFD</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@500;600;700&display=swap">
+<style>
+/* Layout: one column, a cockpit-panel page with the instrument bezel on top and avionics-style controls below it. Deliberately single dark theme. */
+:root{
+  --panel:#14171b;
+  --plate:#1d2126;
+  --rim:#2c323a;
+  --ink:#e7eaee;
+  --muted:#8b949e;
+  --cyan:#41d3e3;
+  --font:"Barlow", system-ui, -apple-system, sans-serif;
+  --cond:"Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+  color-scheme:dark;
+}
+html,body{background:var(--panel);color:var(--ink)}
+body{
+  font-family:var(--font);
+  padding-left:max(16px, env(safe-area-inset-left, 0px));
+  padding-right:max(16px, env(safe-area-inset-right, 0px));
+  padding-block:14px 28px;
+}
+.wrap{max-width:460px;margin:0 auto;display:grid;gap:14px}
+header{display:grid;gap:2px}
+h1{margin:0;font-family:var(--cond);font-weight:700;font-size:1.35rem;letter-spacing:.14em;text-transform:uppercase;text-wrap:balance}
+.sub{margin:0;color:var(--muted);font-size:.9rem;line-height:1.4}
+
+.bezel{
+  background:linear-gradient(180deg,#24282e,#0d0e11);
+  border-radius:16px;padding:10px 10px 8px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.07), inset 0 -1px 0 rgba(0,0,0,.6), 0 12px 28px rgba(0,0,0,.45);
+}
+.screen{position:relative;width:100%;max-width:100%;aspect-ratio:1/1.06;border-radius:5px;overflow:hidden;background:#000}
+canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+.bezel-foot{display:flex;justify-content:space-between;align-items:center;padding:8px 4px 0}
+.brand{font-family:var(--cond);font-weight:600;font-size:.72rem;letter-spacing:.22em;color:#6f7780;text-transform:uppercase}
+.knob{width:30px;height:30px;border-radius:50%;background:radial-gradient(circle at 40% 35%,#4a5059,#16191d 70%);box-shadow:0 2px 4px rgba(0,0,0,.6), inset 0 0 0 2px #0b0c0e}
+
+.controls{display:grid;gap:12px;background:var(--plate);border:1px solid var(--rim);border-radius:12px;padding:12px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.lbl{font-family:var(--cond);font-weight:600;font-size:.75rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+button{
+  font:600 .95rem/1 var(--cond);letter-spacing:.06em;text-transform:uppercase;
+  color:var(--ink);background:#262b31;border:1px solid #3a4149;border-radius:8px;
+  min-height:40px;padding:0 14px;cursor:pointer;touch-action:manipulation;user-select:none;-webkit-user-select:none
+}
+button:active{background:#30363d}
+button:focus-visible,input:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+.seg{display:flex;flex:1;min-width:0}
+.seg button{flex:1;border-radius:0}
+.seg button:first-child{border-radius:8px 0 0 8px}
+.seg button:last-child{border-radius:0 8px 8px 0;border-left:0}
+.seg button[aria-pressed="true"]{background:#0e3a41;border-color:var(--cyan);color:var(--cyan)}
+#zero{flex:0 0 auto}
+
+.power{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center}
+.val{font-family:var(--cond);font-weight:700;font-size:1.05rem;font-variant-numeric:tabular-nums;color:var(--cyan);min-width:3.2em;text-align:right}
+input[type=range]{width:100%;accent-color:var(--cyan);min-height:32px}
+
+.steppers{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.stepper{display:grid;gap:4px;justify-items:center;background:#171a1e;border:1px solid var(--rim);border-radius:10px;padding:8px 6px}
+.stepper .val{min-width:0;text-align:center}
+.stepper .btns{display:grid;grid-template-columns:1fr 1fr;gap:6px;width:100%}
+.stepper button{padding:0;min-height:36px;font-size:1.1rem}
+
+.hint{margin:0;color:var(--muted);font-size:.88rem;line-height:1.45}
+.msg{margin:0;font-size:.88rem;line-height:1.45;color:#f0c46a}
+.msg:empty{display:none}
+.foot{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.placard{
+  font-family:var(--cond);font-weight:600;font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;
+  color:#d9dde2;background:#0b0c0e;border:1px solid #4a515a;border-radius:3px;padding:5px 8px
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Pocket PFD</h1>
+    <p class="sub">A G5-inspired primary flight display with a simple flight model. Drag to fly, or tilt your phone.</p>
+  </header>
+
+  <div class="bezel">
+    <div class="screen" id="screen">
+      <canvas id="pfd" role="img" aria-label="Primary flight display showing attitude, airspeed, altitude, vertical speed and heading"></canvas>
+    </div>
+    <div class="bezel-foot"><span class="brand">Pocket PFD</span><span class="knob" aria-hidden="true"></span></div>
+  </div>
+
+  <section class="controls" aria-label="Controls">
+    <div class="row">
+      <div class="seg" role="group" aria-label="Control mode">
+        <button id="modeDrag" aria-pressed="true">Drag</button>
+        <button id="modeTilt" aria-pressed="false">Tilt</button>
+      </div>
+      <button id="zero">Level</button>
+    </div>
+    <p class="hint" id="hint"></p>
+    <p class="msg" id="msg" role="status"></p>
+
+    <div class="power">
+      <label class="lbl" for="power">Power</label>
+      <input type="range" id="power" min="0" max="100" step="1" value="75">
+      <span class="val" id="powerVal">75%</span>
+    </div>
+
+    <div class="steppers">
+      <div class="stepper">
+        <span class="lbl">Alt sel</span>
+        <span class="val" id="selAltVal">3500</span>
+        <div class="btns"><button id="altDn" aria-label="Selected altitude down 100 feet">−</button><button id="altUp" aria-label="Selected altitude up 100 feet">+</button></div>
+      </div>
+      <div class="stepper">
+        <span class="lbl">Hdg bug</span>
+        <span class="val" id="selHdgVal">230°</span>
+        <div class="btns"><button id="hdgDn" aria-label="Heading bug left 5 degrees">−</button><button id="hdgUp" aria-label="Heading bug right 5 degrees">+</button></div>
+      </div>
+      <div class="stepper">
+        <span class="lbl">Baro</span>
+        <span class="val" id="baroVal">29.92</span>
+        <div class="btns"><button id="baroDn" aria-label="Altimeter setting down">−</button><button id="baroUp" aria-label="Altimeter setting up">+</button></div>
+      </div>
+    </div>
+
+    <div class="foot">
+      <button id="reset">Reset</button>
+      <span class="placard">Not approved for flight · For fun only</span>
+    </div>
+  </section>
+</div>
+
+<script>
+(() => {
+  const D2R = Math.PI / 180;
+  const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+  const wrap360 = d => ((d % 360) + 360) % 360;
+  const wrap180 = d => { d = wrap360(d); return d > 180 ? d - 360 : d; };
+  const pad3 = n => String(n).padStart(3, '0');
+  const F = '"Barlow Semi Condensed", "Arial Narrow", sans-serif';
+
+  // ---------- state ----------
+  const INIT = { V: 110, alt: 3500, hdg: 230, theta: 2, phi: 0, power: 0.75, selAlt: 3500, selHdg: 230, baro: 29.92 };
+  const S = {};
+  const IN = { mode: 'drag', cmdTheta: 2, cmdPhi: 0, tiltTheta: 0, tiltPhi: 0 };
+  function reset() {
+    Object.assign(S, INIT, { slip: 0, vTrend: 0, vs: 0, aoa: 2, stall: false, rate: 0 });
+    IN.cmdTheta = 2; IN.cmdPhi = 0;
+    calib = null;
+    syncReadouts();
+  }
+
+  // ---------- flight model (toy, roughly a C172) ----------
+  // Speeds in knots, accelerations in kt/s. Drag = parasite + induced; g = 19.06 kt/s.
+  const A = 4.24, B = 0.000229, C = 4897, G = 19.06;
+  function step(dt) {
+    const tilt = IN.mode === 'tilt';
+    const tTheta = clamp(tilt ? IN.tiltTheta : IN.cmdTheta, -30, 30);
+    const tPhi = clamp(tilt ? IN.tiltPhi : IN.cmdPhi, -80, 80);
+    const k = 1 - Math.exp(-dt / (tilt ? 0.06 : 0.35));
+    const prevPhi = S.phi;
+    S.theta += (tTheta - S.theta) * k;
+    S.phi += (tPhi - S.phi) * k;
+
+    const rollRate = (S.phi - prevPhi) / dt;
+    S.slip += (clamp(-rollRate * 0.6, -14, 14) - S.slip) * (1 - Math.exp(-dt / 0.4));
+
+    const V = Math.max(S.V, 25);
+    const n = Math.min(1 / Math.cos(S.phi * D2R), 4);
+    S.aoa = Math.min(2 * (110 / V) ** 2 * n, 24);
+    S.stall = S.aoa > 15;
+    let gamma = S.theta - S.aoa;
+    if (S.stall) gamma -= (S.aoa - 15) * 1.5;
+
+    const accel = A * S.power - B * V * V - C * n * n / (V * V) - G * Math.sin(gamma * D2R);
+    S.V = clamp(S.V + accel * dt, 25, 220);
+    S.vTrend += (accel * 6 - S.vTrend) * (1 - Math.exp(-dt / 0.8));
+
+    const vsTrue = V * Math.sin(gamma * D2R) * 101.27;
+    S.alt = Math.max(0, S.alt + vsTrue * dt / 60);
+    S.vs += ((S.alt > 0 ? vsTrue : 0) - S.vs) * (1 - Math.exp(-dt / 0.6));
+
+    S.rate = 1091 * Math.tan(S.phi * D2R) / V; // deg/s
+    S.hdg = wrap360(S.hdg + S.rate * dt);
+  }
+
+  // ---------- canvas ----------
+  const screen = document.getElementById('screen');
+  const cv = document.getElementById('pfd');
+  const ctx = cv.getContext('2d');
+  let W = 360, H = 380, dpr = 1, L = {};
+  function layout() {
+    const k = clamp(W / 360, 0.8, 1.4);
+    const spdW = Math.round(W * 0.19), altW = Math.round(W * 0.2), vsiW = Math.round(W * 0.085);
+    const altX = W - altW - vsiW;
+    const freeW = altX - spdW;
+    const tapeTop = H * 0.09, tapeBot = H * 0.8, hy0 = H * 0.87;
+    L = { k, spdW, altW, vsiW, altX, freeW, tapeTop, tapeBot, hy0,
+      mid: (tapeTop + tapeBot) / 2, th: tapeBot - tapeTop,
+      cx: spdW + freeW / 2, cy: H * 0.44, ppd: H * 0.017,
+      R: Math.min(freeW * 0.46, H * 0.3) };
+  }
+  const fs = n => Math.round(n * L.k);
+  function resize() {
+    const r = screen.getBoundingClientRect();
+    W = r.width; H = r.height;
+    dpr = Math.min(window.devicePixelRatio || 1, 3);
+    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+    layout();
+  }
+  new ResizeObserver(resize).observe(screen);
+  resize();
+
+  function draw() {
+    const c = ctx;
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    c.clearRect(0, 0, W, H);
+    c.lineJoin = 'round';
+
+    // --- sky / ground ---
+    c.save();
+    c.translate(L.cx, L.cy); c.rotate(-S.phi * D2R); c.translate(0, S.theta * L.ppd);
+    const big = Math.max(W, H) * 2;
+    let g = c.createLinearGradient(0, -H, 0, 0);
+    g.addColorStop(0, '#1b4ca8'); g.addColorStop(1, '#3a86e6');
+    c.fillStyle = g; c.fillRect(-big, -big, big * 2, big);
+    g = c.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#8a5a2e'); g.addColorStop(1, '#55361a');
+    c.fillStyle = g; c.fillRect(-big, 0, big * 2, big);
+    c.fillStyle = '#fff'; c.fillRect(-big, -1, big * 2, 2);
+    c.restore();
+
+    // --- pitch ladder ---
+    c.save();
+    c.beginPath(); c.rect(L.spdW, L.tapeTop, L.freeW, L.hy0 - 30 - L.tapeTop); c.clip();
+    c.translate(L.cx, L.cy); c.rotate(-S.phi * D2R); c.translate(0, S.theta * L.ppd);
+    c.strokeStyle = '#fff'; c.fillStyle = '#fff'; c.lineWidth = 1.5;
+    c.font = `600 ${fs(11)}px ${F}`; c.textBaseline = 'middle';
+    for (let p = -90; p <= 90; p += 2.5) {
+      if (p === 0 || Math.abs(p - S.theta) > 22) continue;
+      const y = -p * L.ppd;
+      const len = p % 10 === 0 ? L.freeW * 0.42 : p % 5 === 0 ? L.freeW * 0.2 : L.freeW * 0.09;
+      c.beginPath(); c.moveTo(-len / 2, y); c.lineTo(len / 2, y); c.stroke();
+      if (p % 10 === 0) {
+        c.textAlign = 'right'; c.fillText(Math.abs(p), -len / 2 - 4, y);
+        c.textAlign = 'left'; c.fillText(Math.abs(p), len / 2 + 4, y);
+      }
+    }
+    c.restore();
+
+    // --- bank scale (moves with horizon) ---
+    c.save();
+    c.translate(L.cx, L.cy); c.rotate(-S.phi * D2R);
+    c.strokeStyle = '#fff'; c.lineWidth = 2;
+    c.beginPath(); c.arc(0, 0, L.R, -150 * D2R, -30 * D2R); c.stroke();
+    for (const a of [-60, -45, -30, -20, -10, 10, 20, 30, 45, 60]) {
+      const len = Math.abs(a) === 30 || Math.abs(a) === 60 ? L.R * 0.17 : L.R * 0.09;
+      const ang = (-90 + a) * D2R;
+      c.beginPath();
+      c.moveTo(Math.cos(ang) * L.R, Math.sin(ang) * L.R);
+      c.lineTo(Math.cos(ang) * (L.R + len), Math.sin(ang) * (L.R + len));
+      c.stroke();
+    }
+    c.beginPath(); c.moveTo(0, -L.R); c.lineTo(-7, -L.R - 11); c.lineTo(7, -L.R - 11); c.closePath(); c.stroke();
+    c.restore();
+
+    // fixed roll pointer + slip/skid bar
+    const py = L.cy - L.R + 2;
+    c.fillStyle = Math.abs(S.phi) > 60 ? '#facc15' : '#fff'; c.strokeStyle = '#000'; c.lineWidth = 1;
+    c.beginPath(); c.moveTo(L.cx, py); c.lineTo(L.cx - 8, py + 12); c.lineTo(L.cx + 8, py + 12); c.closePath(); c.fill(); c.stroke();
+    const sx = L.cx + S.slip * 0.9;
+    c.fillRect(sx - 9, py + 15, 18, 5); c.strokeRect(sx - 9, py + 15, 18, 5);
+
+    // --- aircraft symbol ---
+    c.save();
+    c.translate(L.cx, L.cy);
+    c.fillStyle = '#ffd21f'; c.strokeStyle = '#000'; c.lineWidth = 1.5;
+    const w1 = L.freeW * 0.12, w2 = L.freeW * 0.36, t = 5;
+    for (const s of [-1, 1]) {
+      c.beginPath();
+      c.moveTo(s * w1, -t / 2); c.lineTo(s * w2, -t / 2); c.lineTo(s * w2, t / 2);
+      c.lineTo(s * (w1 + t), t / 2); c.lineTo(s * (w1 + t), t * 2.2); c.lineTo(s * w1, t * 2.2);
+      c.closePath(); c.fill(); c.stroke();
+    }
+    c.fillRect(-3, -3, 6, 6); c.strokeRect(-3, -3, 6, 6);
+    c.restore();
+
+    if (S.stall) {
+      c.font = `700 ${fs(16)}px ${F}`; c.textAlign = 'center'; c.textBaseline = 'middle';
+      const sy = L.cy + L.R * 0.62, bw = fs(66), bh = fs(24);
+      c.fillStyle = '#d61f1f'; c.fillRect(L.cx - bw / 2, sy - bh / 2, bw, bh);
+      c.fillStyle = '#fff'; c.fillText('STALL', L.cx, sy + 1);
+    }
+
+    drawSpeed(c); drawAlt(c); drawVsi(c); drawHeading(c);
+  }
+
+  function tapeBg(c, x, w) {
+    c.fillStyle = 'rgba(8,10,14,.55)';
+    c.fillRect(x, L.tapeTop, w, L.th);
+  }
+
+  function drawSpeed(c) {
+    const { spdW, tapeTop, th, mid } = L;
+    const kpp = th / 60, yV = v => mid - (v - S.V) * kpp;
+    c.save();
+    c.beginPath(); c.rect(0, tapeTop, spdW, th); c.clip();
+    tapeBg(c, 0, spdW);
+    const band = (x, w, a, b, col) => { c.fillStyle = col; const y1 = yV(b), y2 = yV(a); c.fillRect(x, y1, w, y2 - y1); };
+    const bx = spdW - 6;
+    band(bx, 6, 48, 129, '#22c55e');
+    band(bx, 6, 129, 163, '#facc15');
+    band(bx, 6, 163, 300, '#e11d1d');
+    band(bx - 4, 3, 33, 85, '#fff');
+    c.strokeStyle = '#fff'; c.fillStyle = '#fff'; c.lineWidth = 1.5;
+    c.font = `600 ${fs(13)}px ${F}`; c.textAlign = 'right'; c.textBaseline = 'middle';
+    for (let v = Math.floor((S.V - 35) / 5) * 5; v <= S.V + 35; v += 5) {
+      if (v < 20) continue;
+      const y = yV(v), len = v % 10 === 0 ? 10 : 6;
+      c.beginPath(); c.moveTo(bx - 4 - len, y); c.lineTo(bx - 4, y); c.stroke();
+      if (v % 10 === 0) c.fillText(v, bx - 18, y);
+    }
+    // trend
+    const tr = clamp(S.vTrend, -30, 30);
+    if (Math.abs(tr) > 1) { c.fillStyle = '#e040e0'; const y2 = yV(S.V + tr); c.fillRect(spdW - 3, Math.min(mid, y2), 3, Math.abs(y2 - mid)); }
+    c.restore();
+
+    // readout
+    const bh = fs(30);
+    c.fillStyle = '#000'; c.strokeStyle = '#fff'; c.lineWidth = 1.5;
+    c.beginPath();
+    c.moveTo(3, mid - bh / 2); c.lineTo(spdW - 12, mid - bh / 2); c.lineTo(spdW - 12, mid - 6);
+    c.lineTo(spdW - 3, mid); c.lineTo(spdW - 12, mid + 6); c.lineTo(spdW - 12, mid + bh / 2); c.lineTo(3, mid + bh / 2);
+    c.closePath(); c.fill(); c.stroke();
+    c.fillStyle = S.V < 48 || S.stall ? '#ff4a4a' : '#fff';
+    c.font = `700 ${fs(21)}px ${F}`; c.textAlign = 'right'; c.textBaseline = 'middle';
+    c.fillText(Math.round(S.V), spdW - 15, mid + 1);
+
+    // labels
+    c.font = `600 ${fs(12)}px ${F}`; c.textAlign = 'left';
+    const tas = Math.round(S.V * (1 + S.alt / 1000 * 0.02));
+    c.fillStyle = '#fff'; c.fillText(`TAS ${tas}KT`, 4, (L.tapeBot + L.hy0) / 2);
+    c.fillStyle = '#000'; c.fillRect(0, 3, spdW + fs(26), L.tapeTop - 6);
+    c.fillStyle = '#41d3e3'; c.fillText(`HDG ${pad3(Math.round(S.selHdg) % 360)}°`, 5, L.tapeTop / 2);
+  }
+
+  function indAlt() { return S.alt + (S.baro - 29.92) * 1000; }
+
+  function drawAlt(c) {
+    const { altX, altW, tapeTop, tapeBot, th, mid } = L;
+    const ia = indAlt();
+    const fpp = th / 600, yA = a => mid - (a - ia) * fpp;
+    c.save();
+    c.beginPath(); c.rect(altX, tapeTop, altW, th); c.clip();
+    tapeBg(c, altX, altW);
+    c.strokeStyle = '#fff'; c.fillStyle = '#fff'; c.lineWidth = 1.5;
+    c.font = `600 ${fs(13)}px ${F}`; c.textAlign = 'left'; c.textBaseline = 'middle';
+    for (let a = Math.floor((ia - 340) / 20) * 20; a <= ia + 340; a += 20) {
+      const y = yA(a), major = a % 100 === 0;
+      c.beginPath(); c.moveTo(altX, y); c.lineTo(altX + (major ? 12 : 6), y); c.stroke();
+      if (major) c.fillText(a, altX + 16, y);
+    }
+    // trend
+    const tr = clamp(S.vs * 0.1, -300, 300);
+    if (Math.abs(tr) > 10) { c.fillStyle = '#e040e0'; const y2 = yA(ia + tr); c.fillRect(altX, Math.min(mid, y2), 3, Math.abs(y2 - mid)); }
+    c.restore();
+
+    // selected altitude bug
+    const by = clamp(yA(S.selAlt), tapeTop + 7, tapeBot - 7);
+    c.fillStyle = '#41d3e3';
+    c.beginPath();
+    c.moveTo(altX, by - 9); c.lineTo(altX + 7, by - 9); c.lineTo(altX + 7, by + 9); c.lineTo(altX, by + 9);
+    c.lineTo(altX, by + 4); c.lineTo(altX + 4, by); c.lineTo(altX, by - 4); c.closePath(); c.fill();
+
+    // readout
+    const bh = fs(30);
+    c.fillStyle = '#000'; c.strokeStyle = '#fff'; c.lineWidth = 1.5;
+    c.beginPath();
+    c.moveTo(altX + 3, mid); c.lineTo(altX + 11, mid - 6); c.lineTo(altX + 11, mid - bh / 2);
+    c.lineTo(altX + altW - 2, mid - bh / 2); c.lineTo(altX + altW - 2, mid + bh / 2);
+    c.lineTo(altX + 11, mid + bh / 2); c.lineTo(altX + 11, mid + 6); c.closePath(); c.fill(); c.stroke();
+    c.fillStyle = '#fff'; c.font = `700 ${fs(20)}px ${F}`; c.textAlign = 'right'; c.textBaseline = 'middle';
+    c.fillText(Math.round(ia / 10) * 10, altX + altW - 6, mid + 1);
+
+    // selected altitude + baro
+    c.fillStyle = '#000'; c.fillRect(altX, 3, W - altX, tapeTop - 6);
+    c.fillStyle = '#41d3e3'; c.font = `600 ${fs(15)}px ${F}`; c.textAlign = 'center';
+    c.fillText(`${S.selAlt}FT`, altX + (W - altX) / 2, tapeTop / 2);
+    c.font = `600 ${fs(12)}px ${F}`;
+    c.fillText(`${S.baro.toFixed(2)}IN`, altX + (W - altX) / 2, (tapeBot + L.hy0) / 2);
+  }
+
+  function drawVsi(c) {
+    const { vsiW, tapeTop, th, mid } = L;
+    const vx = W - vsiW;
+    c.fillStyle = 'rgba(8,10,14,.7)'; c.fillRect(vx, tapeTop, vsiW, th);
+    const yS = v => mid - clamp(v, -2000, 2000) / 2000 * (th / 2 - 10);
+    c.strokeStyle = '#fff'; c.fillStyle = '#fff'; c.lineWidth = 1.5;
+    c.font = `600 ${fs(11)}px ${F}`; c.textAlign = 'left'; c.textBaseline = 'middle';
+    for (let v = -2000; v <= 2000; v += 500) {
+      const y = yS(v), major = v % 1000 === 0;
+      c.beginPath(); c.moveTo(vx, y); c.lineTo(vx + (major ? 9 : 5), y); c.stroke();
+      if (major && v !== 0) c.fillText(Math.abs(v / 1000), vx + 12, y);
+    }
+    const y = yS(S.vs);
+    c.fillStyle = '#000'; c.strokeStyle = '#fff'; c.lineWidth = 1;
+    c.beginPath(); c.moveTo(vx + 1, y); c.lineTo(vx + 7, y - 8); c.lineTo(W - 1, y - 8); c.lineTo(W - 1, y + 8); c.lineTo(vx + 7, y + 8); c.closePath(); c.fill(); c.stroke();
+    if (Math.abs(S.vs) >= 100) {
+      c.fillStyle = '#fff'; c.font = `600 ${fs(10)}px ${F}`; c.textAlign = 'right';
+      c.fillText(Math.round(Math.abs(S.vs) / 50) * 50, W - 3, y + 1);
+    }
+  }
+
+  function drawHeading(c) {
+    const hy = L.hy0;
+    c.fillStyle = 'rgba(8,10,14,.75)'; c.fillRect(0, hy, W, H - hy);
+    const dpp = W / 80, xH = d => W / 2 + (d - S.hdg) * dpp;
+    c.strokeStyle = '#fff'; c.fillStyle = '#fff'; c.lineWidth = 1.5;
+    c.textAlign = 'center'; c.textBaseline = 'top';
+    for (let d = Math.floor((S.hdg - 45) / 5) * 5; d <= S.hdg + 45; d += 5) {
+      const x = xH(d), ten = d % 10 === 0;
+      c.beginPath(); c.moveTo(x, hy + 5); c.lineTo(x, hy + 5 + (ten ? 9 : 5)); c.stroke();
+      if (ten) {
+        const n = wrap360(d);
+        const card = { 0: 'N', 90: 'E', 180: 'S', 270: 'W' }[n];
+        c.font = `${card || n % 30 === 0 ? 700 : 500} ${fs(card || n % 30 === 0 ? 14 : 11)}px ${F}`;
+        c.fillText(card || String(n / 10), x, hy + 17);
+      }
+    }
+    // turn rate trend + standard-rate marks
+    c.fillStyle = '#fff';
+    for (const s of [-1, 1]) c.fillRect(W / 2 + s * 18 * dpp - 1, hy, 2, 5);
+    const tx = W / 2 + clamp(S.rate * 6, -40, 40) * dpp;
+    c.fillStyle = '#e040e0'; c.fillRect(Math.min(W / 2, tx), hy, Math.abs(tx - W / 2), 3);
+
+    // heading bug
+    const bx = clamp(W / 2 + wrap180(S.selHdg - S.hdg) * dpp, 7, W - 7);
+    c.fillStyle = '#41d3e3';
+    c.beginPath(); c.moveTo(bx - 7, hy); c.lineTo(bx - 7, hy + 8); c.lineTo(bx, hy + 4); c.lineTo(bx + 7, hy + 8); c.lineTo(bx + 7, hy); c.closePath(); c.fill();
+
+    // heading box
+    const bw = fs(56), bh = fs(23), top = hy - bh - 4;
+    c.fillStyle = '#000'; c.strokeStyle = '#fff'; c.lineWidth = 1.5;
+    c.beginPath();
+    c.moveTo(W / 2 - bw / 2, top); c.lineTo(W / 2 + bw / 2, top); c.lineTo(W / 2 + bw / 2, top + bh);
+    c.lineTo(W / 2 + 6, top + bh); c.lineTo(W / 2, top + bh + 6); c.lineTo(W / 2 - 6, top + bh); c.lineTo(W / 2 - bw / 2, top + bh);
+    c.closePath(); c.fill(); c.stroke();
+    c.fillStyle = '#fff'; c.font = `700 ${fs(17)}px ${F}`; c.textBaseline = 'middle';
+    let h = Math.round(S.hdg) % 360; if (h === 0) h = 360;
+    c.fillText(pad3(h) + '°', W / 2, top + bh / 2 + 1);
+  }
+
+  // ---------- loop ----------
+  let lastT = performance.now();
+  function frame(t) {
+    const dt = clamp((t - lastT) / 1000, 0.001, 0.05);
+    lastT = t;
+    step(dt);
+    draw();
+    requestAnimationFrame(frame);
+  }
+
+  // ---------- drag input ----------
+  let last = null, lastTap = 0;
+  cv.addEventListener('pointerdown', e => {
+    cv.setPointerCapture(e.pointerId);
+    last = { x: e.clientX, y: e.clientY };
+    const now = performance.now();
+    if (now - lastTap < 300) level();
+    lastTap = now;
+  });
+  cv.addEventListener('pointermove', e => {
+    if (!last || IN.mode !== 'drag') return;
+    const dx = e.clientX - last.x, dy = e.clientY - last.y;
+    last = { x: e.clientX, y: e.clientY };
+    IN.cmdPhi = clamp(IN.cmdPhi + dx * 0.3, -60, 60);
+    IN.cmdTheta = clamp(IN.cmdTheta + dy * 0.1, -20, 25);
+  });
+  ['pointerup', 'pointercancel'].forEach(ev => cv.addEventListener(ev, () => { last = null; }));
+  window.addEventListener('keydown', e => {
+    if (IN.mode !== 'drag' || e.target.tagName === 'INPUT') return;
+    const m = { ArrowLeft: [0, -3], ArrowRight: [0, 3], ArrowUp: [-1, 0], ArrowDown: [1, 0] }[e.key];
+    if (!m) return;
+    e.preventDefault();
+    IN.cmdTheta = clamp(IN.cmdTheta + m[0], -20, 25);
+    IN.cmdPhi = clamp(IN.cmdPhi + m[1], -60, 60);
+  });
+  function level() { IN.cmdPhi = 0; IN.cmdTheta = Math.round(S.aoa); }
+
+  // ---------- tilt input ----------
+  let calib = null, gotMotion = false, wakeLock = null;
+  function onMotion(e) {
+    const a = e.accelerationIncludingGravity;
+    if (!a || a.x == null || a.y == null || a.z == null) return;
+    const m = Math.hypot(a.x, a.y, a.z);
+    if (m < 1) return;
+    gotMotion = true;
+    if (IN.mode !== 'tilt') setMode('tilt');
+    let nx = a.x / m, ny = a.y / m, nz = a.z / m;
+    if (!calib) calib = { s: ny < -0.2 ? -1 : 1 };
+    const ux = nx * calib.s, uy = ny * calib.s, uz = nz * calib.s;
+    const th = Math.asin(clamp(-uz, -1, 1)) / D2R;
+    const ph = Math.atan2(-ux, uy) / D2R;
+    if (calib.th0 == null) { calib.th0 = th; calib.ph0 = ph; }
+    const tTh = th - calib.th0, tPh = wrap180(ph - calib.ph0);
+    IN.tiltTheta += (tTh - IN.tiltTheta) * 0.25;
+    IN.tiltPhi += (tPh - IN.tiltPhi) * 0.25;
+  }
+  async function startTilt() {
+    setMsg('Asking for motion access…');
+    if (typeof DeviceMotionEvent === 'undefined') return tiltFail();
+    try {
+      if (typeof DeviceMotionEvent.requestPermission === 'function') {
+        const r = await DeviceMotionEvent.requestPermission();
+        if (r !== 'granted') return tiltFail('Motion access was declined, so you\'re flying by drag.');
+      }
+    } catch (err) { return tiltFail(); }
+    calib = null; gotMotion = false;
+    window.addEventListener('devicemotion', onMotion);
+    setTimeout(() => {
+      if (!gotMotion) { window.removeEventListener('devicemotion', onMotion); tiltFail(); }
+      else setMsg('');
+    }, 1500);
+  }
+  function tiltFail(text) {
+    setMode('drag');
+    setMsg(text || 'Motion sensors aren\'t available in this view, so you\'re flying by drag. Open the standalone copy on your iPhone (served over HTTPS) to fly by tilting.');
+  }
+  async function keepAwake() {
+    try { wakeLock = await navigator.wakeLock?.request('screen'); } catch (e) { wakeLock = null; }
+  }
+
+  // ---------- UI ----------
+  const $ = id => document.getElementById(id);
+  const msg = $('msg'), hint = $('hint');
+  function setMsg(t) { msg.textContent = t; }
+  function setMode(m) {
+    IN.mode = m;
+    $('modeDrag').setAttribute('aria-pressed', m === 'drag');
+    $('modeTilt').setAttribute('aria-pressed', m === 'tilt');
+    $('zero').textContent = m === 'tilt' ? 'Zero' : 'Level';
+    cv.style.cursor = m === 'drag' ? 'grab' : 'default';
+    hint.textContent = m === 'tilt'
+      ? 'Hold the phone upright like the instrument and tap Zero. Rotate it like a yoke to bank; tilt the top toward you to pitch up. Lock portrait orientation first.'
+      : 'Drag on the display: sideways to bank, down to pitch up. Double-tap to level the wings. Arrow keys work too.';
+    if (m === 'drag') {
+      window.removeEventListener('devicemotion', onMotion);
+      IN.cmdTheta = S.theta; IN.cmdPhi = S.phi;
+    } else keepAwake();
+  }
+  $('modeDrag').addEventListener('click', () => { setMode('drag'); setMsg(''); });
+  $('modeTilt').addEventListener('click', () => { if (IN.mode !== 'tilt') startTilt(); });
+  $('zero').addEventListener('click', () => { if (IN.mode === 'tilt') { calib = null; } else level(); });
+  $('reset').addEventListener('click', () => { reset(); });
+
+  const power = $('power');
+  power.addEventListener('input', () => { S.power = power.value / 100; syncReadouts(); });
+
+  function hold(btn, fn) {
+    let t1, t2;
+    const stop = () => { clearTimeout(t1); clearInterval(t2); };
+    btn.addEventListener('pointerdown', e => {
+      e.preventDefault(); fn(); syncReadouts();
+      t1 = setTimeout(() => { t2 = setInterval(() => { fn(); syncReadouts(); }, 80); }, 400);
+    });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => btn.addEventListener(ev, stop));
+    btn.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn(); syncReadouts(); } });
+  }
+  hold($('altDn'), () => { S.selAlt = clamp(S.selAlt - 100, 0, 18000); });
+  hold($('altUp'), () => { S.selAlt = clamp(S.selAlt + 100, 0, 18000); });
+  hold($('hdgDn'), () => { S.selHdg = wrap360(S.selHdg - 5); });
+  hold($('hdgUp'), () => { S.selHdg = wrap360(S.selHdg + 5); });
+  hold($('baroDn'), () => { S.baro = Math.round(clamp(S.baro - 0.01, 28.5, 31) * 100) / 100; });
+  hold($('baroUp'), () => { S.baro = Math.round(clamp(S.baro + 0.01, 28.5, 31) * 100) / 100; });
+
+  function syncReadouts() {
+    $('powerVal').textContent = Math.round(S.power * 100) + '%';
+    power.value = Math.round(S.power * 100);
+    $('selAltVal').textContent = S.selAlt;
+    let h = Math.round(S.selHdg) % 360; if (h === 0) h = 360;
+    $('selHdgVal').textContent = pad3(h) + '°';
+    $('baroVal').textContent = S.baro.toFixed(2);
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && IN.mode === 'tilt') keepAwake();
+  });
+
+  reset();
+  setMode('drag');
+  requestAnimationFrame(t => { lastT = t; requestAnimationFrame(frame); });
+})();
+</script>
+</body></html>
